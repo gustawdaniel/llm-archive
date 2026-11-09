@@ -28,7 +28,7 @@ import os, glob, shutil, json, subprocess
 EXT_DIR = os.path.dirname(os.path.abspath("build.py"))
 XPI_SRC = os.path.join(EXT_DIR, "dist", "brain-llm-sync-firefox.xpi")
 ZEN_DIR = os.path.expanduser("~/.zen")
-GECKO_ID = "brain-llm-sync@gustawdaniel.com"
+GECKO_ID = "brain-llm-sync@brain-os.local"
 
 if not os.path.exists(XPI_SRC):
     print("❌ Brak pliku XPI:", XPI_SRC)

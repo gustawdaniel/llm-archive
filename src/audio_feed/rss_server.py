@@ -89,12 +89,12 @@ def get_podcast_rss_feed(request: Request, token: Optional[str] = Query(None)):
     ET.SubElement(channel, "link").text = base_url
     ET.SubElement(channel, "language").text = "pl-PL"
     ET.SubElement(channel, "description").text = "Autonomicznie generowany dzienny feed audio: architektura systemów, nowości open source, arXiv i Hacker News bez clickbaitu."
-    ET.SubElement(channel, "itunes:author").text = "Daniel Gustaw"
+    ET.SubElement(channel, "itunes:author").text = os.getenv("PODCAST_AUTHOR", "Brain OS")
     ET.SubElement(channel, "itunes:explicit").text = "no"
 
     owner = ET.SubElement(channel, "itunes:owner")
-    ET.SubElement(owner, "itunes:name").text = "Daniel Gustaw"
-    ET.SubElement(owner, "itunes:email").text = "gustaw.daniel@gmail.com"
+    ET.SubElement(owner, "itunes:name").text = os.getenv("PODCAST_OWNER_NAME", "Brain OS")
+    ET.SubElement(owner, "itunes:email").text = os.getenv("PODCAST_OWNER_EMAIL", "podcast@example.com")
 
     image = ET.SubElement(channel, "itunes:image", {"href": f"{base_url}/cover.png"})
     

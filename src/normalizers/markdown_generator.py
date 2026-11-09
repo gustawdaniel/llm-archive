@@ -4,6 +4,7 @@ import yaml
 from pathlib import Path
 from typing import Tuple
 from ..models import NormalizedConversation, NormalizedMessage, ToolCallRecord
+from ..naming import conversation_rel_path
 
 
 class MarkdownGenerator:
@@ -122,7 +123,7 @@ class MarkdownGenerator:
         clean_title = re.sub(r"[^\w\s-]", "", conversation.title.lower())
         slug = re.sub(r"[-\s]+", "-", clean_title).strip("-")[:60] or "conversation"
         short_id = conversation.external_id[:8]
-        rel_path = f"{conversation.platform}/{date_str}_{slug}_{short_id}.md"
+        rel_path = conversation_rel_path(conversation.platform, date_str, slug, short_id)
 
         return full_md, rel_path
 

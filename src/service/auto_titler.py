@@ -10,6 +10,7 @@ import httpx
 
 from ..config import settings
 from ..database import Database
+from ..naming import conversation_rel_path
 
 logger = logging.getLogger("llm-archive.auto_titler")
 
@@ -153,7 +154,7 @@ class AutoTitler:
         slug = slugify_title(new_title)
         date_str = started_at.strftime("%Y-%m-%d")
         short_id = external_id[:8]
-        new_rel_path = f"{platform}/{date_str}_{slug}_{short_id}.md"
+        new_rel_path = conversation_rel_path(platform, date_str, slug, short_id)
 
         async with self.db.pool.acquire() as conn:
             # 1. Update llm_conversations

@@ -1,8 +1,12 @@
 {
   "target": "llm-archive",
   "repo": "gustawdaniel/llm-archive",
+  "monorepo_sha": "4abd2bc383440f23046e7e156dd0cb82701a4f1e",
+  "monorepo_tag": "v2026.11.1",
+  "monorepo_ref": "v2026.11.1",
+  "timestamp": "2026-11-09T16:57:04.810921+00:00",
   "files_count": 161,
-  "total_size_bytes": 1375414,
+  "total_size_bytes": 1375597,
   "files": [
     {
       "path": ".gitignore",
@@ -36,8 +40,8 @@
     },
     {
       "path": "SECURITY.md",
-      "size": 863,
-      "sha256": "518f69d89ff25f7cdcfbaed937df7ead83ce5970739b443977958d18321e589f"
+      "size": 861,
+      "sha256": "1f5d5b6fc6e469ef70ad958767e44284b8520ac8ad4e34c151b34e1557d756e1"
     },
     {
       "path": "compose.yaml",
@@ -61,8 +65,8 @@
     },
     {
       "path": "extension/README.md",
-      "size": 3978,
-      "sha256": "0a2656d58c6a37c8b9d4b6aa09b6fed7cbe2153b156fef2d544d6d70bed54d1e"
+      "size": 3976,
+      "sha256": "1b2e3f0b96994d84f058a1d4e155927f9d9c10e2a5966c216c58fb9c05114e45"
     },
     {
       "path": "extension/background.js",
@@ -76,13 +80,13 @@
     },
     {
       "path": "extension/install-zen.sh",
-      "size": 4107,
-      "sha256": "fc1e3ddb059c9ceffd950eae787f48f0da584866b93e544590b8968727541e17"
+      "size": 4105,
+      "sha256": "b59d386443eb9915fefbb201e69f7b6eab829cf0f1e13c01bc25ed7e8387e6e5"
     },
     {
       "path": "extension/install.py",
-      "size": 12036,
-      "sha256": "be42d3e0e0f03ece55ea3a6fd2007a66dd9e5d2eb127aa4c2b6d0586816d421d"
+      "size": 12034,
+      "sha256": "7aaed98ef51737b0f9905c6537459f88bd7f3c206199de031e35903dae191d7f"
     },
     {
       "path": "extension/install.sh",
@@ -191,8 +195,8 @@
     },
     {
       "path": "web/Dockerfile",
-      "size": 565,
-      "sha256": "39fe7450967edad6bd5c1fa1140155ae4f2a1f18b07ee38745538d2615125236"
+      "size": 566,
+      "sha256": "ba0f93556286f129b7c149d6f023838cd31f612840d6759ef1858d3badf718ad"
     },
     {
       "path": "web/compose.yaml",
@@ -431,8 +435,8 @@
     },
     {
       "path": "tests/test_extension.py",
-      "size": 4977,
-      "sha256": "6be4d10edd2710be817a608ab106e637e48e33a88f225311a11f8e8fa8645890"
+      "size": 4975,
+      "sha256": "7c3c072bef00c8ec28f124bc76467dba85dc225bea0fd2b3a4250cb50e661133"
     },
     {
       "path": "tests/test_grok_gemini_parser.py",
@@ -676,8 +680,8 @@
     },
     {
       "path": "src/normalizers/markdown_generator.py",
-      "size": 6526,
-      "sha256": "e918cbf748b97959a289fa75279ebb37507dbea5667518cc779230971481cceb"
+      "size": 6581,
+      "sha256": "8e5140e257cc87575fed362f4e850ad6f14b56e23d36b4274a62fab5609fdee3"
     },
     {
       "path": "src/normalizers/mirror.py",
@@ -766,8 +770,8 @@
     },
     {
       "path": "src/audio_feed/rss_server.py",
-      "size": 7296,
-      "sha256": "4a73488c8b9991b190aec0db0ed1b288a876d56f8de9c830a74b8ae107d75275"
+      "size": 7378,
+      "sha256": "c76b0230df7fccbeea96481e4cfca44ee8db758676d24cb82b7aa2c1b48e644c"
     },
     {
       "path": "src/audio_feed/scriptwriter.py",
@@ -791,8 +795,8 @@
     },
     {
       "path": "src/service/auto_titler.py",
-      "size": 12386,
-      "sha256": "cdff21d4b381460628f7d0928bea88a3a093d06010aaa84a22bc8aff495c2093"
+      "size": 12441,
+      "sha256": "a0724a994c8bd6536ef326ccd9fb90dc9ecb06d5e118dc2435eeabc4e0090dfc"
     },
     {
       "path": "src/service/mcp_server.py",

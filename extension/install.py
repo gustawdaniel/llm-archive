@@ -25,7 +25,7 @@ CHROME_DIST = os.path.join(DIST_DIR, "chrome")
 FIREFOX_XPI = os.path.join(DIST_DIR, "brain-llm-sync-firefox.xpi")
 HOME = os.path.expanduser("~")
 
-GECKO_ID = "brain-llm-sync@gustawdaniel.com"
+GECKO_ID = "brain-llm-sync@brain-os.local"
 
 def run_cmd(cmd, check=False, sudo=False):
     if sudo and os.geteuid() != 0:

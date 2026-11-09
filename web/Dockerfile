@@ -20,7 +20,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3001
 ENV HOST=0.0.0.0
-ENV LLM_API_URL=http://brain-db:8080
+ENV LLM_API_URL=http://127.0.0.1:8080
 
 COPY --from=builder /app/package*.json ./
 COPY --from=builder /app/node_modules ./node_modules

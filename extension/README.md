@@ -79,7 +79,7 @@ Projekt posiada zintegrowany generator i linter:
   ```
   Generuje:
   - `dist/chrome/` – manifest Chromium MV3 (`service_worker`)
-  - `dist/firefox/` – manifest Firefox MV3 (`scripts`, `gecko.id: brain-llm-sync@gustawdaniel.com`)
+  - `dist/firefox/` – manifest Firefox MV3 (`scripts`, `gecko.id: brain-llm-sync@brain-os.local`)
   - `dist/brain-llm-sync-chrome.zip` – paczka dla Chrome Web Store
   - `dist/brain-llm-sync-firefox.xpi` / `.zip` – paczka dla AMO (Firefox Add-ons)
 

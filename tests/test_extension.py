@@ -30,7 +30,7 @@ def test_extension_build_and_manifests():
     assert "scripts" in firefox_manifest["background"]
     assert "service_worker" not in firefox_manifest["background"]
     assert "browser_specific_settings" in firefox_manifest
-    assert firefox_manifest["browser_specific_settings"]["gecko"]["id"] == "brain-llm-sync@gustawdaniel.com"
+    assert firefox_manifest["browser_specific_settings"]["gecko"]["id"] == "brain-llm-sync@brain-os.local"
 
     # Verify packages
     chrome_zip = os.path.join(EXTENSION_DIR, "dist", "brain-llm-sync-chrome.zip")
