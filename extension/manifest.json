@@ -1,0 +1,104 @@
+{
+  "manifest_version": 3,
+  "name": "Brain LLM Sync & Archive [v1.0.22]",
+  "version": "1.0.22",
+  "description": "Background sync of ChatGPT, Claude, DeepSeek, Grok and Gemini conversations to personal Brain knowledge base.",
+  "permissions": [
+    "storage",
+    "alarms",
+    "tabs"
+  ],
+  "host_permissions": [
+    "<all_urls>",
+    "https://chatgpt.com/*",
+    "https://chat.openai.com/*",
+    "https://claude.ai/*",
+    "https://chat.deepseek.com/*",
+    "https://grok.com/*",
+    "https://gemini.google.com/*",
+    "http://localhost/*",
+    "http://127.0.0.1/*",
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*"
+  ],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "brain-llm-sync@brain-os.local",
+      "data_collection_permissions": {
+        "required": [
+          "none"
+        ]
+      }
+    }
+  },
+  "background": {
+    "scripts": [
+      "background.js"
+    ],
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_title": "Brain LLM Sync",
+    "default_icon": {
+      "16": "icons/icon-16.png",
+      "32": "icons/icon-32.png",
+      "48": "icons/icon-48.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon-16.png",
+    "32": "icons/icon-32.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://chatgpt.com/*",
+        "https://chat.openai.com/*"
+      ],
+      "js": [
+        "content/chatgpt.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "content/claude.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://chat.deepseek.com/*"
+      ],
+      "js": [
+        "content/deepseek.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://grok.com/*",
+        "https://x.com/i/grok*"
+      ],
+      "js": [
+        "content/grok.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
+        "content/gemini.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

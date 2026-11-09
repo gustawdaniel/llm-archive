@@ -1,0 +1,15 @@
+{
+  "name": "@brain/llm-archive-extension",
+  "version": "1.0.0",
+  "description": "Cross-browser (Chrome & Firefox) extension for syncing web LLM conversations into Brain knowledge base",
+  "private": true,
+  "scripts": {
+    "build": "python3 build.py",
+    "lint": "web-ext lint --source-dir dist/firefox",
+    "lint:source": "web-ext lint --source-dir .",
+    "package": "python3 build.py"
+  },
+  "devDependencies": {
+    "web-ext": "^8.4.0"
+  }
+}

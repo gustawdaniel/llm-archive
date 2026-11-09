@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+  <meta charset="UTF-8">
+  <title>Brain LLM Sync</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="header">
+    <div class="logo">🧠 Brain LLM Sync <span class="version-badge" id="extVersion">v1.0.1</span></div>
+    <div class="badge" id="statusBadge">Online</div>
+  </div>
+
+  <div class="card">
+    <div class="stat-row">
+      <span class="label">Zsynchronizowano:</span>
+      <span class="val" id="syncedCount">0</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Ostatni czat:</span>
+      <span class="val truncate" id="lastTitle">-</span>
+    </div>
+    <div class="stat-row">
+      <span class="label">Czas ostatniej sync:</span>
+      <span class="val" id="lastTime">-</span>
+    </div>
+  </div>
+
+  <div class="actions">
+    <button id="btnSyncNow" class="btn btn-primary">⚡ Synchronizuj Teraz (Delta)</button>
+    <button id="btnBackfill" class="btn btn-secondary">📥 Pełny Eksport Historii (Wstecz)</button>
+  </div>
+
+  <div class="settings-box">
+    <label for="deviceInput">Urządzenie (Hostname):</label>
+    <input type="text" id="deviceInput" placeholder="np. rog, mac">
+    <label for="backendInput">Adres Ingest API (Tailscale / Localhost):</label>
+    <input type="text" id="backendInput" placeholder="http://localhost:8080/api/v1/ingest">
+    <button id="btnGrantPerms" class="btn btn-sm" style="display: none; background: #e06c75; color: #fff; margin-bottom: 8px;">⚠️ Odblokuj uprawnienia sieciowe</button>
+    <button id="btnSaveConfig" class="btn btn-sm">Zapisz konfigurację</button>
+  </div>
+
+  <div class="footer" id="statusMessage">Wszystkie usługi aktywne</div>
+  <script src="popup.js"></script>
+</body>
+</html>

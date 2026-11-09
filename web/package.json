@@ -1,0 +1,32 @@
+{
+  "name": "brain-llm-web",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite dev",
+    "build": "vite build",
+    "prices": "node scripts/update-prices.mjs",
+    "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo ''",
+    "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json"
+  },
+  "devDependencies": {
+    "@sveltejs/adapter-node": "^5.5.7",
+    "@sveltejs/kit": "^2.63.0",
+    "@sveltejs/vite-plugin-svelte": "^7.1.2",
+    "@types/katex": "^0.16.8",
+    "@types/node": "^26.6.2",
+    "highlight.js": "^11.11.1",
+    "marked": "^15.0.7",
+    "svelte": "^5.56.1",
+    "svelte-check": "^4.6.0",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.16"
+  },
+  "packageManager": "pnpm@10.29.3+sha512.498e1fb4cca5aa06c1dcf2611e6fafc50972ffe7189998c409e90de74566444298ffe43e6cd2acdc775ba1aa7cc5e092a8b7054c811ba8c5770f84693d33d2dc",
+  "dependencies": {
+    "katex": "^0.19.0",
+    "marked-katex-extension": "^5.1.13"
+  }
+}

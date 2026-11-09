@@ -1,0 +1,170 @@
+/* Brain LLM Archive - Modern Dark Design System */
+:root {
+	--bg-base: #090d16;
+	--bg-subtle: #0f1523;
+	--bg-card: rgba(18, 26, 43, 0.75);
+	--bg-card-hover: rgba(28, 40, 68, 0.85);
+	--bg-card-active: rgba(34, 48, 80, 0.95);
+	--bg-input: rgba(13, 19, 33, 0.85);
+
+	--border-subtle: rgba(255, 255, 255, 0.08);
+	--border-card: rgba(255, 255, 255, 0.12);
+	--border-focus: rgba(56, 189, 248, 0.5);
+
+	--text-primary: #f8fafc;
+	--text-secondary: #94a3b8;
+	--text-muted: #64748b;
+	--text-accent: #38bdf8;
+
+	/* Platform Colors */
+	--color-antigravity: #06b6d4;
+	--color-antigravity-bg: rgba(6, 182, 212, 0.12);
+	--color-claude: #f59e0b;
+	--color-claude-bg: rgba(245, 158, 11, 0.12);
+	--color-chatgpt: #10b981;
+	--color-chatgpt-bg: rgba(16, 185, 129, 0.12);
+	--color-deepseek: #3b82f6;
+	--color-deepseek-bg: rgba(59, 130, 246, 0.12);
+	--color-gemini: #8b5cf6;
+	--color-gemini-bg: rgba(139, 92, 246, 0.12);
+	--color-grok: #e2e8f0;
+	--color-grok-bg: rgba(226, 232, 240, 0.12);
+	--color-cline: #38bdf8;
+	--color-cline-bg: rgba(56, 189, 248, 0.12);
+
+	--font-sans: 'Outfit', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+	--radius-sm: 8px;
+	--radius-md: 12px;
+	--radius-lg: 18px;
+	--radius-pill: 9999px;
+
+	--shadow-card: 0 10px 30px -10px rgba(0, 0, 0, 0.6), 0 0 1px 1px var(--border-card);
+	--shadow-glow: 0 0 30px rgba(6, 182, 212, 0.2);
+
+	--transition-quick: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+	--transition-smooth: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+*, *::before, *::after {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 0;
+}
+
+html, body {
+	min-height: 100%;
+	background-color: var(--bg-base);
+	color: var(--text-primary);
+	font-family: var(--font-sans);
+	line-height: 1.5;
+	-webkit-font-smoothing: antialiased;
+	-moz-osx-font-smoothing: grayscale;
+}
+
+body {
+	position: relative;
+	background-image: 
+		radial-gradient(circle at 10% 10%, rgba(6, 182, 212, 0.08) 0%, transparent 40%),
+		radial-gradient(circle at 90% 85%, rgba(139, 92, 246, 0.08) 0%, transparent 45%),
+		radial-gradient(circle at 50% 50%, rgba(16, 185, 129, 0.03) 0%, transparent 60%);
+	background-attachment: fixed;
+}
+
+/* Glassmorphism helpers */
+.glass-panel {
+	background: var(--bg-card);
+	backdrop-filter: blur(16px);
+	-webkit-backdrop-filter: blur(16px);
+	border: 1px solid var(--border-card);
+	border-radius: var(--radius-lg);
+	box-shadow: var(--shadow-card);
+}
+
+.glass-card {
+	background: rgba(22, 32, 52, 0.6);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-md);
+	transition: all var(--transition-smooth);
+}
+
+.glass-card:hover {
+	background: var(--bg-card-hover);
+	border-color: var(--border-focus);
+	transform: translateY(-2px);
+	box-shadow: 0 12px 28px -8px rgba(0, 0, 0, 0.5);
+}
+
+/* Markdown styling */
+.markdown-body {
+	color: var(--text-primary);
+	font-size: 0.95rem;
+	line-height: 1.65;
+}
+
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+	margin-top: 1.5rem;
+	margin-bottom: 0.75rem;
+	font-weight: 600;
+	color: #ffffff;
+}
+
+.markdown-body h1 { font-size: 1.6rem; border-bottom: 1px solid var(--border-subtle); padding-bottom: 0.5rem; }
+.markdown-body h2 { font-size: 1.3rem; }
+.markdown-body h3 { font-size: 1.1rem; }
+
+.markdown-body p {
+	margin-bottom: 1rem;
+}
+
+.markdown-body pre {
+	background: #060911;
+	border: 1px solid var(--border-subtle);
+	border-radius: var(--radius-md);
+	padding: 1rem;
+	overflow-x: auto;
+	margin: 1rem 0;
+	font-family: var(--font-mono);
+	font-size: 0.88rem;
+}
+
+.markdown-body code {
+	font-family: var(--font-mono);
+	background: rgba(255, 255, 255, 0.08);
+	padding: 0.15rem 0.35rem;
+	border-radius: 4px;
+	font-size: 0.88em;
+	color: #38bdf8;
+}
+
+.markdown-body pre code {
+	background: transparent;
+	padding: 0;
+	color: inherit;
+}
+
+.markdown-body blockquote {
+	border-left: 3px solid var(--color-antigravity);
+	padding-left: 1rem;
+	margin: 1rem 0;
+	color: var(--text-secondary);
+	background: rgba(6, 182, 212, 0.04);
+	border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+	padding-top: 0.5rem;
+	padding-bottom: 0.5rem;
+}
+
+.markdown-body ul, .markdown-body ol {
+	padding-left: 1.5rem;
+	margin-bottom: 1rem;
+}
+
+.markdown-body li {
+	margin-bottom: 0.25rem;
+}

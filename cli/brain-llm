@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Centralized CLI entrypoint for brain-llm
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+if [ -f "${APP_DIR}/.venv/bin/python" ]; then
+    PYTHON="${APP_DIR}/.venv/bin/python"
+elif command -v uv &>/dev/null && [ -f "${APP_DIR}/pyproject.toml" ]; then
+    PYTHON="uv run --directory ${APP_DIR} python"
+else
+    PYTHON="python3"
+fi
+
+export PYTHONPATH="${APP_DIR}:${PYTHONPATH:-}"
+exec ${PYTHON} -m src.cli.main "$@"

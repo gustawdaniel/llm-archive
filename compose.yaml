@@ -1,0 +1,28 @@
+services:
+  llm-archive-api:
+    # Built in CI (see .github/workflows/llm-archive-api.yml), pushed to ghcr.io.
+    # No `build:` stanza on purpose: this host only ever pulls this tag via
+    # deploy-dispatch.sh, it never builds an image locally.
+    image: ghcr.io/gustawdaniel/brain-llm-archive-api:latest
+    container_name: brain-llm-api
+    # Bounded, not infinite: a silent forever-flapping container hides real
+    # conflicts (e.g. something else already holding :8080) instead of surfacing
+    # them. 5 tries with Docker's default backoff, then stop and stay failed.
+    restart: on-failure:5
+    network_mode: "host"
+    volumes:
+      - ./data/doc:/doc/llm-archive
+    environment:
+      - API_PORT=8080
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/brain_knowledge
+      - EMBEDDING_PROVIDER=ollama
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_FALLBACK_URLS=http://localhost:11434,http://ollama:11434
+      - OLLAMA_MODEL=bge-m3
+      - MARKDOWN_EXPORT_DIR=/doc/llm-archive
+      - ENABLE_AUTO_TITLER=true
+      - TITLER_MODEL=qwen2.5:7b
+      - TITLER_INTERVAL=600
+      # No DEVICE_NAME here on purpose: /api/v1/ingest rejects requests missing
+      # metadata.device instead of falling back to this server's own name.
+

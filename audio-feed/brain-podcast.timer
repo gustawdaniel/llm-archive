@@ -1,0 +1,10 @@
+[Unit]
+Description=Timer for Brain Audio Feed Daily Generation at 06:00
+After=time-sync.target
+
+[Timer]
+OnCalendar=*-*-* 06:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target

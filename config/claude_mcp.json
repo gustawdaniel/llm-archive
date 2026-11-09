@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "brain-llm": {
+      "command": "brain-llm",
+      "args": ["mcp"],
+      "env": {
+        "DATABASE_URL": "postgresql://postgres:postgres@localhost:5432/brain_knowledge"
+      }
+    }
+  }
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=LLM Agent Watcher (Claude Code + Antigravity + Cline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=%h/pro/brain/apps/llm-archive/.venv/bin/python %h/pro/brain/apps/llm-archive/daemon/agent_watcher.py
+Restart=on-failure
+RestartSec=5
+Environment=INGEST_URL=http://brain-llm/api/v1/ingest
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=default.target
+

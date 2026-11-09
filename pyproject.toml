@@ -1,0 +1,34 @@
+[project]
+name = "brain-llm-archive"
+version = "0.1.0"
+description = "Centralized LLM history ingestion, normalization to Markdown, and hybrid semantic search with Vector Postgres for the brain monorepo."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pydantic>=2.7.0",
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "asyncpg>=0.29.0",
+    "pgvector>=0.2.5",
+    "httpx>=0.27.0",
+    "watchfiles>=0.22.0",
+    "typer>=0.12.3",
+    "rich>=13.7.1",
+    "pyyaml>=6.0.1",
+    "numpy>=1.26.0",
+    "scikit-learn>=1.3.0",
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.0",
+    "zstandard>=0.25.0",
+]
+
+[project.scripts]
+brain-llm = "src.cli.main:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
