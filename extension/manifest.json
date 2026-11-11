@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "Brain LLM Sync & Archive [v1.0.22]",
-  "version": "1.0.22",
+  "name": "Brain LLM Sync",
+  "version": "1.0.23",
   "description": "Background sync of ChatGPT, Claude, DeepSeek, Grok and Gemini conversations to personal Brain knowledge base.",
   "permissions": [
     "storage",
     "alarms",
-    "tabs"
+    "tabs",
+    "scripting"
   ],
   "host_permissions": [
-    "<all_urls>",
     "https://chatgpt.com/*",
     "https://chat.openai.com/*",
     "https://claude.ai/*",
@@ -26,7 +26,8 @@
       "id": "brain-llm-sync@brain-os.local",
       "data_collection_permissions": {
         "required": [
-          "none"
+          "personalCommunications",
+          "websiteContent"
         ]
       }
     }
@@ -96,9 +97,22 @@
         "https://gemini.google.com/*"
       ],
       "js": [
+        "content/gemini_token_bridge.js"
+      ],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://gemini.google.com/*"
+      ],
+      "js": [
         "content/gemini.js"
       ],
       "run_at": "document_idle"
     }
+  ],
+  "optional_host_permissions": [
+    "<all_urls>"
   ]
 }

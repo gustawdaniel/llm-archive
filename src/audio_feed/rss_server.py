@@ -1,6 +1,7 @@
 import email.utils
 import json
 import logging
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import List, Optional
@@ -22,7 +23,10 @@ EPISODES_DIR = DATA_DIR / "episodes"
 EPISODES_DIR.mkdir(parents=True, exist_ok=True)
 METADATA_FILE = DATA_DIR / "episodes_meta.json"
 
-PODCAST_SECRET_TOKEN = "brain_feed_secret_2026"
+# Password for podcast RSS feed URLs: no hardcoded default (it was a literal in
+# the repo until 2026-11). Provide it via env; when unset, token checks are skipped
+# for local/private use only.
+PODCAST_SECRET_TOKEN = os.getenv("PODCAST_SECRET_TOKEN", "")
 
 app = FastAPI(title="Brain Podcast Private RSS Server", version="1.0.0")
 

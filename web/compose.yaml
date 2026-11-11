@@ -2,7 +2,7 @@ services:
   llm-archive-web:
     # Built in CI (see .github/workflows/llm-archive-web.yml), pushed to ghcr.io.
     # No `build:` stanza on purpose: this host only ever pulls this tag via
-    # deploy-dispatch.sh, it never builds from whatever happens to be on its
+    # GHCR, it never builds from whatever happens to be on its
     # disk (that's what silently served stale UI before).
     image: ghcr.io/gustawdaniel/brain-llm-archive-web:latest
     container_name: brain-llm-web

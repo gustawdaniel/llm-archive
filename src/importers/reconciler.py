@@ -10,6 +10,7 @@ from ..embedder import Embedder
 from ..chunker import SemanticChunker
 from ..models import NormalizedConversation
 from ..normalizers import MarkdownGenerator
+from ..markdown_store import write_if_changed
 
 logger = logging.getLogger("importer.reconciler")
 
@@ -87,10 +88,8 @@ class ArchiveReconciler:
                                 on_progress(processed_count, total)
                         return
 
-                    # 3. Always write Markdown locally (Obsidian sync)
-                    target_file = settings.MARKDOWN_EXPORT_DIR / rel_path
-                    target_file.parent.mkdir(parents=True, exist_ok=True)
-                    target_file.write_text(md_content, encoding="utf-8")
+                    # 3. Always write Markdown locally (Obsidian sync) - skip byte-identical rewrites
+                    write_if_changed(settings.MARKDOWN_EXPORT_DIR / rel_path, md_content)
 
                     # 4. Compute chunks & embeddings if database is connected
                     if self.db and self.db.pool:

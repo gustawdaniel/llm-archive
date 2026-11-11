@@ -73,13 +73,14 @@ class Settings:
             toml_conf.get("cline_home", str(self.CLINE_HOMES[0] if self.CLINE_HOMES else cline_candidates[0]))
         ))
 
-        # OpenCode, Aider, OMP, Zed, Hermes
+        # OpenCode, Aider, OMP, Zed, Hermes, Goose
         self.OPENCODE_DB: Path = Path(os.getenv("OPENCODE_DB", toml_conf.get("opencode_db", str(Path.home() / ".local" / "share" / "opencode" / "opencode.db"))))
         self.AIDER_HOME: Path = Path(os.getenv("AIDER_HOME", toml_conf.get("aider_home", str(Path.home() / ".aider"))))
         self.OMP_HOME: Path = Path(os.getenv("OMP_HOME", toml_conf.get("omp_home", str(Path.home() / ".omp"))))
         self.ZED_DB: Path = Path(os.getenv("ZED_DB", toml_conf.get("zed_db", str(Path.home() / ".local" / "share" / "zed" / "threads" / "threads.db"))))
         self.CODEX_HOME: Path = Path(os.getenv("CODEX_HOME", toml_conf.get("codex_home", str(Path.home() / ".codex"))))
         self.HERMES_DB: Path = Path(os.getenv("HERMES_DB", toml_conf.get("hermes_db", str(Path.home() / ".hermes" / "state.db"))))
+        self.GOOSE_DB: Path = Path(os.getenv("GOOSE_DB", toml_conf.get("goose_db", str(Path.home() / ".local" / "share" / "goose" / "sessions" / "sessions.db"))))
 
         # Embedding & search
         self.EMBEDDING_PROVIDER: str = os.getenv("EMBEDDING_PROVIDER", toml_conf.get("embedding_provider", "ollama"))

@@ -26,6 +26,7 @@
 		{ id: 'omp', label: 'Oh My Pi (OMP)' },
 		{ id: 'zed', label: 'Zed' },
 		{ id: 'hermes', label: 'Hermes' },
+		{ id: 'goose', label: 'Goose' },
 		{ id: 'chatgpt', label: 'ChatGPT' },
 		{ id: 'claude_web', label: 'Claude Web' },
 		{ id: 'deepseek', label: 'DeepSeek' },

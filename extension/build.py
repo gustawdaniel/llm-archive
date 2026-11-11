@@ -15,6 +15,8 @@ import shutil
 import zipfile
 
 EXT_DIR = os.path.dirname(os.path.abspath(__file__))
+# Store listings need a stable name; the version lives in manifest "version" only.
+EXT_NAME = "Brain LLM Sync"
 DIST_DIR = os.path.join(EXT_DIR, "dist")
 CHROME_DIR = os.path.join(DIST_DIR, "chrome")
 FIREFOX_DIR = os.path.join(DIST_DIR, "firefox")
@@ -58,7 +60,7 @@ def bump_version(manifest_path, part="patch"):
         parts[2] += 1
     new_ver = ".".join(str(p) for p in parts)
     data["version"] = new_ver
-    data["name"] = f"Brain LLM Sync & Archive [v{new_ver}]"
+    data["name"] = EXT_NAME
     with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
         f.write("\n")
@@ -106,9 +108,9 @@ def build(bump_part=None):
     with open(manifest_path, "r", encoding="utf-8") as f:
         base_manifest = json.load(f)
     version = base_manifest.get("version", "unknown")
-    base_manifest["name"] = f"Brain LLM Sync & Archive [v{version}]"
+    base_manifest["name"] = EXT_NAME
 
-    print(f"=== Building {base_manifest['name']} (Chrome & Firefox) ===")
+    print(f"=== Building {EXT_NAME} v{version} (Chrome & Firefox) ===")
 
     # 1. Clean dist
     if os.path.exists(DIST_DIR):
@@ -139,28 +141,51 @@ def build(bump_part=None):
     firefox_manifest["background"] = {
         "scripts": ["background.js"]
     }
-    # Firefox match patterns do not support port numbers
+    # Firefox match patterns do not support port numbers or port wildcards
     import re
     cleaned_hosts = []
     for h in base_manifest.get("host_permissions", []):
         ch = re.sub(r":\d+", "", h)
+        ch = re.sub(r":\*", "", ch)
         if ch not in cleaned_hosts:
             cleaned_hosts.append(ch)
     firefox_manifest["host_permissions"] = cleaned_hosts
+    firefox_manifest["optional_host_permissions"] = base_manifest.get("optional_host_permissions", [])
+
+    # Firefox does not support world: MAIN in content_scripts (uses wrappedJSObject)
+    firefox_cs = []
+    for cs in base_manifest.get("content_scripts", []):
+        if cs.get("world") == "MAIN":
+            continue
+        firefox_cs.append(cs)
+    firefox_manifest["content_scripts"] = firefox_cs
     with open(os.path.join(FIREFOX_DIR, "manifest.json"), "w", encoding="utf-8") as f:
         json.dump(firefox_manifest, f, indent=2)
     print("  [Firefox] Manifest V3 generated -> dist/firefox/manifest.json")
 
     # 5. Pack ZIP & XPI
     create_zip(CHROME_DIR, os.path.join(DIST_DIR, "brain-llm-sync-chrome.zip"))
+
+    # 5b. Pack Chrome Web Store release (MUST NOT contain "key" field in manifest)
+    chrome_store_dir = os.path.join(DIST_DIR, "chrome-store")
+    copy_assets(chrome_store_dir)
+    chrome_store_manifest = dict(chrome_manifest)
+    chrome_store_manifest.pop("key", None)
+    with open(os.path.join(chrome_store_dir, "manifest.json"), "w", encoding="utf-8") as f:
+        json.dump(chrome_store_manifest, f, indent=2)
+    create_zip(chrome_store_dir, os.path.join(DIST_DIR, "brain-llm-sync-chrome-store.zip"))
+    shutil.rmtree(chrome_store_dir)
+
     create_zip(FIREFOX_DIR, os.path.join(DIST_DIR, "brain-llm-sync-firefox.xpi"))
     create_zip(FIREFOX_DIR, os.path.join(DIST_DIR, "brain-llm-sync-firefox.zip"))
 
     print("\n=== Build Complete ===")
-    print(f"  Chrome unpacked:  {CHROME_DIR}")
-    print(f"  Firefox unpacked: {FIREFOX_DIR}")
-    print(f"  Chrome zip:       {os.path.join(DIST_DIR, 'brain-llm-sync-chrome.zip')}")
-    print(f"  Firefox XPI:      {os.path.join(DIST_DIR, 'brain-llm-sync-firefox.xpi')}")
+    print(f"  Chrome unpacked:     {CHROME_DIR}")
+    print(f"  Firefox unpacked:    {FIREFOX_DIR}")
+    print(f"  Chrome dev zip:      {os.path.join(DIST_DIR, 'brain-llm-sync-chrome.zip')}")
+    print(f"  Chrome store zip:    {os.path.join(DIST_DIR, 'brain-llm-sync-chrome-store.zip')}")
+    print(f"  Firefox XPI:         {os.path.join(DIST_DIR, 'brain-llm-sync-firefox.xpi')}")
+    print(f"  Firefox store zip:   {os.path.join(DIST_DIR, 'brain-llm-sync-firefox.zip')}")
 
 if __name__ == "__main__":
     import sys

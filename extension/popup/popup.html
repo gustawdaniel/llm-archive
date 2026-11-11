@@ -7,10 +7,58 @@
 </head>
 <body>
   <div class="header">
-    <div class="logo">🧠 Brain LLM Sync <span class="version-badge" id="extVersion">v1.0.1</span></div>
-    <div class="badge" id="statusBadge">Online</div>
+    <div class="logo">🧠 Brain LLM Sync <span class="version-badge" id="extVersion">v1.0.23</span></div>
+    <div class="badge online" id="statusBadge">Sprawdzam...</div>
   </div>
 
+  <!-- Pasek stanu połączeń -->
+  <div class="connection-strip">
+    <div class="connection-item">
+      <span class="status-dot amber" id="bridgeDot"></span>
+      <span id="bridgeText">Mostek :3040...</span>
+    </div>
+    <div class="connection-item">
+      <span class="status-dot amber" id="apiDot"></span>
+      <span id="apiText">API...</span>
+    </div>
+    <div class="connection-item">
+      <span style="color: #64748b;">Host:</span>
+      <strong id="deviceBadge" style="color: #cbd5e1;">-</strong>
+    </div>
+  </div>
+
+  <!-- Panel Diagnostyki i Pomocy (pokazywany gdy brak połączenia lub błąd) -->
+  <div class="troubleshoot-box" id="troubleshootBox">
+    <div class="troubleshoot-title">
+      <span id="troubleshootIcon">⚠️</span>
+      <span id="troubleshootTitle">Brak połączenia z lokalnym mostkiem proxy</span>
+    </div>
+    <div class="troubleshoot-desc" id="troubleshootDesc">
+      Serwer proxy na porcie 127.0.0.1:3040 nie odpowiada. Transkrypty czatów nie mogą zostać zarejestrowane.
+    </div>
+
+    <div class="cmd-group">
+      <div class="cmd-label">📋 Gdzie szukać logów usługi:</div>
+      <div class="cmd-row">
+        <code>tail -f ~/.local/share/brain-llm/extension-logger.log</code>
+        <button class="btn-copy-cmd" data-cmd="tail -f ~/.local/share/brain-llm/extension-logger.log" title="Kopiuj polecenie">Kopiuj</button>
+      </div>
+    </div>
+
+    <div class="cmd-group">
+      <div class="cmd-label">🚀 Uruchomienie / reinstalacja daemona:</div>
+      <div class="cmd-row">
+        <code>cd apps/llm-archive/extension &amp;&amp; ./install.sh</code>
+        <button class="btn-copy-cmd" data-cmd="cd apps/llm-archive/extension && ./install.sh" title="Kopiuj polecenie">Kopiuj</button>
+      </div>
+    </div>
+
+    <div style="margin-top: 4px;">
+      <a href="#" id="linkDocs" class="doc-link">📖 Otwórz instrukcję instalacji (README)</a>
+    </div>
+  </div>
+
+  <!-- Karta statystyk -->
   <div class="card">
     <div class="stat-row">
       <span class="label">Zsynchronizowano:</span>
@@ -26,21 +74,36 @@
     </div>
   </div>
 
+  <!-- Akcje -->
   <div class="actions">
     <button id="btnSyncNow" class="btn btn-primary">⚡ Synchronizuj Teraz (Delta)</button>
     <button id="btnBackfill" class="btn btn-secondary">📥 Pełny Eksport Historii (Wstecz)</button>
   </div>
 
+  <!-- Ustawienia i testy -->
   <div class="settings-box">
     <label for="deviceInput">Urządzenie (Hostname):</label>
-    <input type="text" id="deviceInput" placeholder="np. rog, mac">
-    <label for="backendInput">Adres Ingest API (Tailscale / Localhost):</label>
+    <input type="text" id="deviceInput" placeholder="np. mac, rog">
+
+    <label for="backendInput">Fallback Ingest API (Direct):</label>
     <input type="text" id="backendInput" placeholder="http://localhost:8080/api/v1/ingest">
+
     <button id="btnGrantPerms" class="btn btn-sm" style="display: none; background: #e06c75; color: #fff; margin-bottom: 8px;">⚠️ Odblokuj uprawnienia sieciowe</button>
-    <button id="btnSaveConfig" class="btn btn-sm">Zapisz konfigurację</button>
+
+    <div class="settings-actions">
+      <button id="btnTestConn" class="btn btn-sm btn-secondary">🔍 Test połączenia</button>
+      <button id="btnSaveConfig" class="btn btn-sm btn-primary">Zapisz</button>
+    </div>
   </div>
 
+  <!-- Logi diagnostyczne -->
+  <div class="diagnostics-toggle">
+    <a href="#" id="toggleLogsBtn">📋 Pokaż ostatnie logi diagnostyczne ▾</a>
+  </div>
+  <div class="diagnostics-panel" id="diagnosticsPanel"></div>
+
   <div class="footer" id="statusMessage">Wszystkie usługi aktywne</div>
+
   <script src="popup.js"></script>
 </body>
 </html>

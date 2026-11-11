@@ -1,11 +1,19 @@
 const DEFAULT_BACKEND = "http://localhost:8080/api/v1/ingest";
 const ext = globalThis.browser || globalThis.chrome;
-const VERSION = (ext?.runtime?.getManifest && ext.runtime.getManifest()?.version) || "1.0.4";
+const VERSION = (ext?.runtime?.getManifest && ext.runtime.getManifest()?.version) || "1.0.22";
+
+// In-memory circular buffer of recent diagnostic logs (for popup inspection)
+const recentLogs = [];
+const MAX_RECENT_LOGS = 50;
 
 async function getDeviceName() {
-  const data = await ext.storage.local.get(["deviceName"]);
-  if (data.deviceName && data.deviceName.trim()) {
-    return data.deviceName.trim();
+  try {
+    const data = await ext.storage.local.get(["deviceName"]);
+    if (data.deviceName && data.deviceName.trim()) {
+      return data.deviceName.trim();
+    }
+  } catch (storageErr) {
+    console.warn("[Brain Background] Failed reading deviceName from storage:", storageErr);
   }
 
   // 1. Try local daemon/logger auto-discovery on localhost:3040/device
@@ -19,8 +27,12 @@ async function getDeviceName() {
         logDiagnostic("info", `Auto-detected device hostname from local service: '${detected}'`);
         return detected;
       }
+    } else {
+      logDiagnostic("debug", `Local daemon 3040 /device returned HTTP ${res.status}`);
     }
-  } catch (_) {}
+  } catch (daemonErr) {
+    logDiagnostic("debug", `Local daemon 3040 not reachable for device auto-detection: ${daemonErr.message}`);
+  }
 
   // 2. Fallback to platform info
   try {
@@ -31,7 +43,9 @@ async function getDeviceName() {
       logDiagnostic("info", `Platform fallback device name set: '${fallback}' (os: ${plat.os})`);
       return fallback;
     }
-  } catch (_) {}
+  } catch (platErr) {
+    logDiagnostic("warn", `Platform detection failed: ${platErr.message}`);
+  }
 
   return "rog";
 }
@@ -75,7 +89,7 @@ ext.runtime.onInstalled.addListener(async () => {
 
 if (ext.runtime.onStartup) {
   ext.runtime.onStartup.addListener(async () => {
-    logDiagnostic("info", `Browser startup detected, verifying alarms...`);
+    logDiagnostic("info", "Browser startup detected, verifying alarms...");
     await ensureDeltaSyncAlarm();
   });
 }
@@ -93,8 +107,14 @@ if (ext.alarms && ext.alarms.onAlarm) {
           if (tab && tab.id) {
             try {
               const p = ext.tabs.sendMessage(tab.id, { type: "TRIGGER_DELTA_SYNC" });
-              if (p && typeof p.catch === "function") p.catch(() => {});
-            } catch (_) {}
+              if (p && typeof p.catch === "function") {
+                p.catch((err) => {
+                  console.debug(`[Brain Alarm] Tab ${tab.id} dispatch ignored: ${err?.message}`);
+                });
+              }
+            } catch (tabSendErr) {
+              console.debug(`[Brain Alarm] Failed sending to tab ${tab.id}: ${tabSendErr.message}`);
+            }
           }
         }
       } catch (err) {
@@ -112,6 +132,18 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
+  if (request.type === "GET_DIAGNOSTICS") {
+    ext.storage.local.get(["extension_recent_logs"]).then((data) => {
+      const logs = (data.extension_recent_logs && data.extension_recent_logs.length > 0)
+        ? data.extension_recent_logs
+        : recentLogs;
+      sendResponse({ status: "ok", logs });
+    }).catch(() => {
+      sendResponse({ status: "ok", logs: recentLogs });
+    });
+    return true;
+  }
+
   if (request.type === "INGEST_PAYLOAD") {
     handleIngest(request.platform, request.payload, request.metadata)
       .then((res) => sendResponse({ status: "success", result: res }))
@@ -122,7 +154,10 @@ ext.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.type === "GET_DEVICE_INFO") {
     getDeviceName()
       .then((dev) => sendResponse({ status: "success", device: dev }))
-      .catch(() => sendResponse({ status: "error", device: "rog" }));
+      .catch((err) => {
+        logDiagnostic("warn", "Failed getting device name: " + err.message);
+        sendResponse({ status: "error", device: "rog" });
+      });
     return true; // Keep channel open for async response
   }
 
@@ -143,6 +178,25 @@ function logDiagnostic(level, message, details = null, source = "background.js")
   } else {
     logFn(`${tag} ${message}`);
   }
+
+  // Push to circular buffer
+  const timeStr = new Date().toLocaleTimeString();
+  recentLogs.push({ time: timeStr, level, message, details, source });
+  if (recentLogs.length > MAX_RECENT_LOGS) {
+    recentLogs.shift();
+  }
+
+  // Persist to storage so service worker restarts do not wipe logs
+  try {
+    ext.storage.local.get(["extension_recent_logs"]).then((stored) => {
+      const list = stored.extension_recent_logs || [];
+      list.push({ time: timeStr, level, message, details, source, timestamp: new Date().toISOString() });
+      if (list.length > MAX_RECENT_LOGS) list.shift();
+      ext.storage.local.set({ extension_recent_logs: list }).catch(() => {});
+    }).catch(() => {});
+  } catch (_) {}
+
+  // Relay to local logger server on 3040
   try {
     fetch("http://127.0.0.1:3040/log", {
       method: "POST",
@@ -155,8 +209,12 @@ function logDiagnostic(level, message, details = null, source = "background.js")
         details,
         timestamp: new Date().toISOString()
       })
-    }).catch(() => {});
-  } catch (_) {}
+    }).catch((netErr) => {
+      // Local daemon is not running or network blocked; suppressed to avoid feedback loops
+    });
+  } catch (err) {
+    // In background service worker context fetch might rarely fail synchronously
+  }
 }
 
 async function resolveTargetUrl() {
@@ -166,22 +224,37 @@ async function resolveTargetUrl() {
     if (bridgeCheck.ok) {
       return "http://127.0.0.1:3040/ingest";
     }
-  } catch (_) {}
-
-  const { backendUrl } = await ext.storage.local.get(["backendUrl"]);
-  if (!backendUrl || backendUrl === LEGACY_BACKEND || backendUrl.includes("brain-llm")) {
-    await ext.storage.local.set({ backendUrl: DEFAULT_BACKEND });
-    return DEFAULT_BACKEND;
+    logDiagnostic("debug", `Bridge 127.0.0.1:3040/health returned status ${bridgeCheck.status}`);
+  } catch (err) {
+    logDiagnostic("debug", `Bridge 127.0.0.1:3040 not available (${err.message}), falling back to direct API`);
   }
+
+  let backendUrl = DEFAULT_BACKEND;
+  try {
+    const stored = await ext.storage.local.get(["backendUrl"]);
+    if (stored.backendUrl && !stored.backendUrl.includes("brain-llm")) {
+      backendUrl = stored.backendUrl;
+    } else {
+      await ext.storage.local.set({ backendUrl: DEFAULT_BACKEND });
+    }
+  } catch (storageErr) {
+    logDiagnostic("warn", "Failed reading backendUrl from storage: " + storageErr.message);
+  }
+
   return backendUrl;
 }
 
 async function handleGetSyncStatus(platform, limit = 50) {
   const platformCacheKey = `synced_cache_${platform}`;
-  const stored = (await ext.storage.local.get([platformCacheKey])) || {};
-  const localCache = stored[platformCacheKey] || {};
+  let localCache = {};
+  try {
+    const stored = (await ext.storage.local.get([platformCacheKey])) || {};
+    localCache = stored[platformCacheKey] || {};
+  } catch (cacheErr) {
+    logDiagnostic("warn", `Could not read local cache for ${platform}: ${cacheErr.message}`);
+  }
 
-  let target = await resolveTargetUrl();
+  const target = await resolveTargetUrl();
   let statusUrl;
   if (target.includes("127.0.0.1:3040")) {
     statusUrl = `http://127.0.0.1:3040/sync/status?platform=${encodeURIComponent(platform)}&limit=${limit}`;
@@ -205,14 +278,12 @@ async function handleGetSyncStatus(platform, limit = 50) {
           method: "GET",
           headers: { Accept: "application/json" }
         });
-        logDiagnostic("info", `Sync status fetched via local logger bridge (127.0.0.1:3040)`);
-      } catch (_) {
-        // Fall back to persistent local cache
-        logDiagnostic("warn", `Remote sync status unreachable (${err.message}), falling back to local cache (${Object.keys(localCache).length} chats cached)`);
+        logDiagnostic("info", "Sync status fetched via local logger bridge (127.0.0.1:3040)");
+      } catch (bridgeErr) {
+        logDiagnostic("warn", `Remote and bridge status unreachable (${err.message} / ${bridgeErr.message}), falling back to local cache (${Object.keys(localCache).length} chats cached)`);
         return { platform, count: Object.keys(localCache).length, conversations: localCache, offline: true };
       }
     } else {
-      // Fall back to persistent local cache
       logDiagnostic("warn", `Bridge sync status unreachable (${err.message}), falling back to local cache (${Object.keys(localCache).length} chats cached)`);
       return { platform, count: Object.keys(localCache).length, conversations: localCache, offline: true };
     }
@@ -232,19 +303,29 @@ async function handleGetSyncStatus(platform, limit = 50) {
   result.count = Object.keys(mergedConvs).length;
 
   // Persist updated merged cache locally
-  await ext.storage.local.set({ [platformCacheKey]: mergedConvs });
+  try {
+    await ext.storage.local.set({ [platformCacheKey]: mergedConvs });
+  } catch (saveErr) {
+    logDiagnostic("warn", "Failed persisting merged cache: " + saveErr.message);
+  }
+
   logDiagnostic("info", `DB sync status received: ${result.count} known conversations (DB + local cache).`, { platform, count: result.count });
   return result;
 }
 
 async function handleIngest(platform, payload, metadata) {
-  let target = await resolveTargetUrl();
+  const target = await resolveTargetUrl();
   const deviceName = await getDeviceName();
 
-  const msgCount = payload.messages ? payload.messages.length : (payload.responses ? payload.responses.length : 0);
-  logDiagnostic("info", `Sending ${platform} chat to backend: '${payload.title}' (${msgCount} msgs, convId: ${payload.conversation_id}, device: ${deviceName})`, {
+  const convTitle = payload.title || payload.chat_session?.title || metadata?.title || "Rozmowa";
+  const convId = payload.conversation_id || payload.chat_session?.id || metadata?.conversation_id || metadata?.convId || "unknown";
+  const msgCount = (Array.isArray(payload.messages) && payload.messages.length) ||
+                   (Array.isArray(payload.chat_messages) && payload.chat_messages.length) ||
+                   (Array.isArray(payload.responses) && payload.responses.length) || 0;
+
+  logDiagnostic("info", `Sending ${platform} chat to backend: '${convTitle}' (${msgCount} msgs, convId: ${convId}, device: ${deviceName})`, {
     platform,
-    convId: payload.conversation_id,
+    convId: convId,
     device: deviceName,
     messageCount: msgCount,
     syncMethod: metadata?.sync_method
@@ -276,10 +357,10 @@ async function handleIngest(platform, payload, metadata) {
         headers: { "Content-Type": "application/json" },
         body: bodyData
       });
-      logDiagnostic("info", `Ingested conversation via local logger bridge (127.0.0.1:3040)`);
+      logDiagnostic("info", "Ingested conversation via local logger bridge (127.0.0.1:3040)");
     } catch (bridgeErr) {
-      logDiagnostic("error", `Local bridge also unreachable (${bridgeErr.message}). Check permissions or network.`);
-      throw err;
+      logDiagnostic("error", `Both direct ingest (${err.message}) and local bridge (${bridgeErr.message}) failed. Verify that daemon is running via 'tail -f ~/.local/share/brain-llm/extension-logger.log' or run './install.sh'`);
+      throw new Error(`Ingest unreachable: direct failed (${err.message}), bridge 3040 failed (${bridgeErr.message})`);
     }
   }
 
@@ -297,27 +378,34 @@ async function handleIngest(platform, payload, metadata) {
   });
 
   // Update sync stats
-  const stats = (await ext.storage.local.get(["syncedCount"])) || { syncedCount: 0 };
-  await ext.storage.local.set({
-    syncedCount: (stats.syncedCount || 0) + 1,
-    lastSyncTime: new Date().toISOString(),
-    lastSyncTitle: result.title
-  });
+  try {
+    const stats = (await ext.storage.local.get(["syncedCount"])) || { syncedCount: 0 };
+    await ext.storage.local.set({
+      syncedCount: (stats.syncedCount || 0) + 1,
+      lastSyncTime: new Date().toISOString(),
+      lastSyncTitle: result.title
+    });
+  } catch (statsErr) {
+    logDiagnostic("warn", "Failed saving synced stats: " + statsErr.message);
+  }
 
   // Automatically record this conversation in the platform's local persistent cache
-  const platformCacheKey = `synced_cache_${platform}`;
-  const stored = (await ext.storage.local.get([platformCacheKey])) || {};
-  const localCache = stored[platformCacheKey] || {};
-  const externalConvId = payload.conversation_id || metadata?.conversation_id || result.conversation_id;
-  if (externalConvId) {
-    localCache[externalConvId] = {
-      message_count: result.total_messages || msgCount,
-      updated_at: payload.updated_at || payload.modifyTime || new Date().toISOString(),
-      synced_at: Date.now()
-    };
-    await ext.storage.local.set({ [platformCacheKey]: localCache });
+  try {
+    const platformCacheKey = `synced_cache_${platform}`;
+    const stored = (await ext.storage.local.get([platformCacheKey])) || {};
+    const localCache = stored[platformCacheKey] || {};
+    const externalConvId = payload.conversation_id || payload.chat_session?.id || metadata?.conversation_id || result.conversation_id;
+    if (externalConvId) {
+      localCache[externalConvId] = {
+        message_count: result.total_messages || msgCount,
+        updated_at: payload.updated_at || payload.modifyTime || new Date().toISOString(),
+        synced_at: Date.now()
+      };
+      await ext.storage.local.set({ [platformCacheKey]: localCache });
+    }
+  } catch (cacheErr) {
+    logDiagnostic("warn", "Failed updating local cache: " + cacheErr.message);
   }
 
   return result;
 }
-

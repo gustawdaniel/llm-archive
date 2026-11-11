@@ -34,6 +34,8 @@
 			? `~/.local/share/zed/threads/threads.db`
 			: platform === 'hermes'
 			? `~/.hermes/state.db`
+			: platform === 'goose'
+			? `~/.local/share/goose/sessions/sessions.db`
 			: `~/.claude/projects/*/${externalId}.jsonl`
 	);
 
@@ -54,6 +56,8 @@
 			? `ssh ${host} "sqlite3 ~/.local/share/zed/threads/threads.db \"SELECT id, summary, updated_at FROM threads WHERE id = '${externalId}';\""`
 			: platform === 'hermes'
 			? `ssh ${host} "sqlite3 ~/.hermes/state.db \"SELECT id, title, model FROM sessions WHERE id = '${externalId}';\""`
+			: platform === 'goose'
+			? `ssh ${host} "sqlite3 ~/.local/share/goose/sessions/sessions.db \"SELECT id, name, provider_name FROM sessions WHERE id = '${externalId}';\""`
 			: `ssh ${host} "find ~/.claude/projects -name '${externalId}.jsonl'"`
 	);
 

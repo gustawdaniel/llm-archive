@@ -73,6 +73,20 @@ class SQLiteWALBuffer:
             if "file_mtime" not in cols:
                 conn.execute("ALTER TABLE pending_sessions ADD COLUMN file_mtime REAL;")
                 conn.commit()
+            # Kanoniczny tytuł rozmowy nadany przez AutoTitler (serwer). Bez tego
+            # każde urządzenie renderuje markdown z surowego tytułu transkryptu,
+            # więc plik na Macu nazywa się inaczej niż w bazie i po każdej zmianie
+            # tytułu powstaje kolejna kopia rozmowy w archiwum.
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS canonical_titles (
+                    external_id TEXT PRIMARY KEY,
+                    title TEXT NOT NULL,
+                    rel_path TEXT,
+                    content_sha256 TEXT,
+                    updated_at TEXT DEFAULT (datetime('now', 'localtime'))
+                );
+            """)
+            conn.commit()
 
     def get_known_files(self) -> Dict[str, tuple]:
         """Returns map of {file_path: (file_mtime, file_offset)} for files in buffer."""
@@ -119,6 +133,29 @@ class SQLiteWALBuffer:
                         ELSE 0
                     END;
             """, (platform, external_id, payload_json, file_path, file_offset, file_mtime))
+            conn.commit()
+
+    def get_canonical(self, external_id: str) -> Optional[dict]:
+        """Kanoniczny tytuł i ścieżka ostatnio zapisane dla tej rozmowy (może być None)."""
+        with self._get_connection() as conn:
+            conn.row_factory = sqlite3.Row
+            row = conn.execute("""
+                SELECT external_id, title, rel_path, content_sha256
+                FROM canonical_titles WHERE external_id = ?;
+            """, (external_id,)).fetchone()
+            return dict(row) if row else None
+
+    def set_canonical(self, external_id: str, title: str, rel_path: str, content_sha256: Optional[str] = None):
+        with self._get_connection() as conn:
+            conn.execute("""
+                INSERT INTO canonical_titles (external_id, title, rel_path, content_sha256, updated_at)
+                VALUES (?, ?, ?, ?, datetime('now', 'localtime'))
+                ON CONFLICT(external_id) DO UPDATE SET
+                    title = excluded.title,
+                    rel_path = excluded.rel_path,
+                    content_sha256 = COALESCE(excluded.content_sha256, canonical_titles.content_sha256),
+                    updated_at = datetime('now', 'localtime');
+            """, (external_id, title, rel_path, content_sha256))
             conn.commit()
 
     def get_pending(self, limit: int = 20, ignore_backoff: bool = False) -> List[dict]:
@@ -199,6 +236,7 @@ class HTTPForwarder:
                         self.buffer.mark_synced(item["id"])
                         synced_count += 1
                         logger.info(f"Successfully synced session {item['platform']}:{item['external_id']}")
+                        self._remember_canonical(item["external_id"], resp)
                     else:
                         error_text = f"HTTP {resp.status_code}: {resp.text[:200]}"
                         self.buffer.mark_failed(item["id"], error_text)
@@ -209,6 +247,21 @@ class HTTPForwarder:
                     logger.warning(f"Network error forwarding {item['external_id']}: {error_text}")
 
         return synced_count
+
+    def _remember_canonical(self, external_id: str, resp: httpx.Response):
+        """Zapisuje tytuł/ścieżkę, które nadał serwer (AutoTitler jest kanoniczny)."""
+        try:
+            data = resp.json()
+        except Exception:
+            return
+        title = data.get("title")
+        rel_path = data.get("relative_path")
+        if not title or not rel_path:
+            return
+        previous = self.buffer.get_canonical(external_id)
+        self.buffer.set_canonical(external_id, title, rel_path)
+        if previous and previous.get("title") != title:
+            logger.info(f"Canonical title for {external_id[:8]} changed: {previous.get('title')!r} -> {title!r}")
 
     async def run_loop(self):
         logger.info(f"HTTPForwarder started. Ingest URL: {self.ingest_url}")

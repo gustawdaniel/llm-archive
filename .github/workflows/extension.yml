@@ -1,0 +1,94 @@
+# Brain LLM Sync: build, test and publish the browser extension to the Chrome Web
+# Store and Firefox Add-ons (AMO). Lives in the public llm-archive repo (exported from
+# the monorepo, apps/llm-archive/.github/workflows/) and runs on free GitHub runners.
+#
+# Trigger: every release tag of this repo (v*). The stores reject an upload whose
+# version is not higher than the published one, so the stores are updated only when
+# extension/manifest.json "version" changed since the previous tag; otherwise the run
+# only builds, tests and lints. Bump it with: python extension/build.py --bump patch
+#
+# The first version of each store listing is uploaded by hand (it creates the listing
+# and the Chrome extension ID); see extension/STORE_PUBLISHING.md for the secrets.
+name: Browser extension
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: "Upload to the stores (even if the version did not change since the last tag)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  extension:
+    runs-on: ubuntu-latest
+    env:
+      # chrome-webstore-upload-cli reads these names
+      CLIENT_ID: ${{ secrets.CHROME_CLIENT_ID }}
+      CLIENT_SECRET: ${{ secrets.CHROME_CLIENT_SECRET }}
+      REFRESH_TOKEN: ${{ secrets.CHROME_REFRESH_TOKEN }}
+      PUBLISHER_ID: ${{ secrets.CHROME_PUBLISHER_ID }}
+      EXTENSION_ID: ${{ secrets.CHROME_EXTENSION_ID }}
+      # web-ext reads these names
+      WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+      WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # previous tag, to see whether the extension version changed
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build packages
+        run: |
+          pip install --quiet cryptography pytest pytest-asyncio
+          python extension/build.py
+
+      - name: Test
+        run: pytest -q tests/test_extension.py
+
+      - name: Lint (Mozilla web-ext)
+        run: npx --yes web-ext@10.8.0 lint --source-dir extension/dist/firefox
+
+      - name: Decide whether to publish
+        id: decide
+        run: |
+          version=$(jq -r .version extension/manifest.json)
+          prev_tag=$(git describe --tags --abbrev=0 "${GITHUB_SHA}^" 2>/dev/null || true)
+          prev_version=""
+          if [ -n "$prev_tag" ]; then
+            prev_version=$(git show "$prev_tag:extension/manifest.json" 2>/dev/null | jq -r .version || true)
+          fi
+          publish=false
+          if [ "${{ inputs.publish }}" = "true" ]; then publish=true; fi
+          if [ "${{ github.event_name }}" = "push" ] && [ "$version" != "$prev_version" ]; then publish=true; fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=$publish" >> "$GITHUB_OUTPUT"
+          echo "extension $version (previous tag ${prev_tag:-none}: ${prev_version:-none}) → publish=$publish"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brain-llm-sync-${{ steps.decide.outputs.version }}
+          path: |
+            extension/dist/*.zip
+            extension/dist/*.xpi
+
+      - name: Chrome Web Store (upload + publish)
+        if: steps.decide.outputs.publish == 'true' && env.CLIENT_ID != ''
+        run: npx --yes chrome-webstore-upload-cli@4.0.2 --source extension/dist/brain-llm-sync-chrome-store.zip
+
+      - name: Firefox Add-ons (submit listed version)
+        if: steps.decide.outputs.publish == 'true' && env.WEB_EXT_API_KEY != ''
+        # approval-timeout 0: submit and return; AMO reviews and publishes on its own
+        run: npx --yes web-ext@10.8.0 sign --source-dir extension/dist/firefox --channel listed --approval-timeout 0

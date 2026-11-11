@@ -25,8 +25,18 @@
         type: "DIAGNOSTIC_LOG",
         ...record
       });
-      if (p && p.catch) p.catch(() => {});
-    } catch (_) {}
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          if (!err?.message?.includes("Extension context invalidated")) {
+            console.debug("[Brain Log Relay]", err?.message || err);
+          }
+        });
+      }
+    } catch (err) {
+      if (!err?.message?.includes("Extension context invalidated")) {
+        console.debug("[Brain Log Relay]", err?.message || err);
+      }
+    }
   }
 
   logDiagnostic("info", `DeepSeek content script loaded on ${window.location.hostname}${window.location.pathname}`);
@@ -77,7 +87,8 @@
       const userToken = localStorage.getItem("userToken");
       if (!userToken) return null;
       return JSON.parse(userToken).value;
-    } catch (_) {
+    } catch (err) {
+      logDiagnostic("warn", "Failed parsing DeepSeek userToken from localStorage", { error: err.message });
       return null;
     }
   }

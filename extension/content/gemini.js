@@ -23,8 +23,18 @@
         details,
         timestamp: new Date().toISOString()
       });
-      if (p && p.catch) p.catch(() => {});
-    } catch (_) {}
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          if (!err?.message?.includes("Extension context invalidated")) {
+            console.debug("[Brain Log Relay]", err?.message || err);
+          }
+        });
+      }
+    } catch (err) {
+      if (!err?.message?.includes("Extension context invalidated")) {
+        console.debug("[Brain Log Relay]", err?.message || err);
+      }
+    }
   }
 
   logDiagnostic("info", `Gemini content script loaded on ${window.location.pathname}`);
@@ -81,7 +91,15 @@
       let bl = "boq_assistant-bard-web-server";
       let sid = null;
 
-      // 1. Direct window check (when running in page context or main world)
+      // 1. Direct dataset check (populated by world: MAIN gemini_token_bridge.js)
+      if (typeof document !== "undefined" && document.documentElement?.dataset?.geminiAt) {
+        at = document.documentElement.dataset.geminiAt;
+        bl = document.documentElement.dataset.geminiBl || bl;
+        sid = document.documentElement.dataset.geminiSid || null;
+        if (at) return { at, bl, sid };
+      }
+
+      // 2. Direct window check (when running in page context or main world)
       if (typeof window !== "undefined" && window.WIZ_global_data) {
         at = window.WIZ_global_data.SNlM0e || null;
         bl = window.WIZ_global_data.cfb2h || bl;
@@ -89,7 +107,16 @@
         if (at) return { at, bl, sid };
       }
 
-      // 2. Scan DOM <script> elements (works in isolated worlds)
+      // 3. Firefox wrappedJSObject access
+      if (typeof window !== "undefined" && window.wrappedJSObject && window.wrappedJSObject.WIZ_global_data) {
+        const wiz = window.wrappedJSObject.WIZ_global_data;
+        at = wiz.SNlM0e || null;
+        bl = wiz.cfb2h || bl;
+        sid = wiz.FdrFJe || null;
+        if (at) return { at, bl, sid };
+      }
+
+      // 4. Scan DOM <script> elements (works in isolated worlds)
       if (typeof document !== "undefined") {
         const scripts = document.querySelectorAll("script");
         for (let i = 0; i < scripts.length; i++) {
@@ -175,7 +202,9 @@
                 }
               }
             }
-          } catch (_) {}
+          } catch (parseErr) {
+            console.debug("[Brain Gemini RPC Array Parse]", parseErr);
+          }
         }
       }
 
@@ -187,7 +216,9 @@
           const unescaped = JSON.parse(`"${match[1]}"`);
           return JSON.parse(unescaped);
         }
-      } catch (_) {}
+      } catch (regexParseErr) {
+        console.debug("[Brain Gemini RPC Regex Parse]", regexParseErr);
+      }
 
       return null;
     },
@@ -587,28 +618,31 @@
   let lastActiveSyncedId = null;
   let lastActiveMsgCount = 0;
 
-  async function syncActiveChat() {
+  async function syncActiveChat(force = false) {
     const urlMatch = window.location.href.match(/\/(?:app|chat)\/([a-zA-Z0-9_-]{6,})/);
-    if (!urlMatch) return;
+    if (!urlMatch) {
+      logDiagnostic("debug", `Brak identyfikatora czatu Gemini w URL: ${window.location.href}`);
+      return;
+    }
     const convId = urlMatch[1];
     if (["library", "videos", "students", "search", "settings", "help", "prompts"].includes(convId.toLowerCase())) {
       return;
     }
 
     try {
-      logDiagnostic("debug", `Checking active chat: ${convId}`);
+      logDiagnostic("info", `Rozpoczęto synchronizację aktywnego czatu Gemini: ${convId} (force: ${force})`);
       // 1. Try RPC first (instant, full history, no DOM scrolling)
       const rpcConv = await GeminiRPCFetcher.fetchConversation(convId);
       if (rpcConv && rpcConv.messages.length > 0) {
-        if (lastActiveSyncedId === convId && rpcConv.messages.length === lastActiveMsgCount) {
-          logDiagnostic("debug", `Active chat ${convId} unchanged (${rpcConv.messages.length} msgs), skipping.`);
+        if (!force && lastActiveSyncedId === convId && rpcConv.messages.length === lastActiveMsgCount) {
+          logDiagnostic("debug", `Aktywny czat ${convId} niezmieniony (${rpcConv.messages.length} msgs), pomijam.`);
           return;
         }
 
         // Resolve title (sidebar > prompt > fallback, never generic h1)
         rpcConv.title = extractGeminiTitle(convId, rpcConv.title);
 
-        logDiagnostic("info", `Active chat extracted via RPC: '${rpcConv.title}' (${rpcConv.messages.length} msgs)`, { convId, msgs: rpcConv.messages.length });
+        logDiagnostic("info", `Aktywny czat pobrany przez RPC: '${rpcConv.title}' (${rpcConv.messages.length} msgs)`, { convId, msgs: rpcConv.messages.length });
 
         await ext.runtime.sendMessage({
           type: "INGEST_PAYLOAD",
@@ -622,52 +656,86 @@
         return;
       }
     } catch (err) {
-      logDiagnostic("warn", `RPC fetch failed for active chat ${convId}, trying DOM fallback: ${err.message}`);
+      logDiagnostic("warn", `RPC fetch nie powiódł się dla ${convId}, przełączam na DOM: ${err.message}`);
     }
 
     // 2. Fallback: DOM scraping
-    scrapeAndIngestDOM(convId);
+    scrapeAndIngestDOM(convId, force);
   }
 
-  function scrapeAndIngestDOM(convId) {
+  function scrapeAndIngestDOM(convId, force = false) {
     try {
       const title = extractGeminiTitle(convId);
 
-      const userTurns = document.querySelectorAll(".user-query, [data-test-id='user-query'], user-query");
-      const modelTurns = document.querySelectorAll(".model-response-text, [data-test-id='model-response'], message-content");
+      const USER_SELECTORS = [
+        "user-query",
+        "[data-test-id='user-query']",
+        ".user-query",
+        "[class*='user-query']",
+        ".query-content",
+        "[class*='query-content']",
+        "[class*='query-text']",
+        "chat-turn [class*='user']"
+      ].join(", ");
+
+      const MODEL_SELECTORS = [
+        "model-response",
+        "[data-test-id='model-response']",
+        ".model-response",
+        "[class*='model-response']",
+        "message-content",
+        "markdown-renderer",
+        "[class*='response-container']",
+        "chat-turn [class*='model']"
+      ].join(", ");
+
+      const root = document.querySelector("main, [role='main'], chat-window") || document.body;
+      let userEls = Array.from(root.querySelectorAll(USER_SELECTORS))
+        .filter(el => !el.closest("aside, nav, side-navigation-v2, mat-sidenav, [role='navigation']"));
+      let modelEls = Array.from(root.querySelectorAll(MODEL_SELECTORS))
+        .filter(el => !el.closest("aside, nav, side-navigation-v2, mat-sidenav, [role='navigation']"));
+
+      // Deduplicate nested elements
+      userEls = userEls.filter(el => !userEls.some(other => other !== el && other.contains(el)));
+      modelEls = modelEls.filter(el => !modelEls.some(other => other !== el && other.contains(el)));
+
+      const turns = [];
+      userEls.forEach(el => turns.push({ element: el, role: "user", author: "USER" }));
+      modelEls.forEach(el => turns.push({ element: el, role: "assistant", author: "ASSISTANT" }));
+
+      // Sort naturally in document DOM order
+      turns.sort((a, b) => {
+        if (a.element === b.element) return 0;
+        const pos = a.element.compareDocumentPosition(b.element);
+        if (pos & Node.DOCUMENT_POSITION_FOLLOWING) return -1;
+        if (pos & Node.DOCUMENT_POSITION_PRECEDING) return 1;
+        return 0;
+      });
 
       const messages = [];
-      const maxTurns = Math.max(userTurns.length, modelTurns.length);
-
-      for (let i = 0; i < maxTurns; i++) {
-        if (userTurns[i]) {
+      turns.forEach((turn, idx) => {
+        const clone = turn.element.cloneNode(true);
+        clone.querySelectorAll("button, .action-buttons, .copy-button, .edit-button, [aria-label*='Copy'], [aria-label*='Edit']").forEach(b => b.remove());
+        const text = (clone.innerText || clone.textContent || "").trim();
+        if (text) {
           messages.push({
-            id: `${convId}_u_${i}`,
-            author: "USER",
-            role: "user",
-            parts: [{ text: userTurns[i].innerText.trim() }],
+            id: `${convId}_${turn.role}_${idx}`,
+            author: turn.author,
+            role: turn.role,
+            parts: [{ text }],
             created_at: new Date().toISOString(),
-            step_index: messages.length
+            step_index: idx
           });
         }
-        if (modelTurns[i]) {
-          messages.push({
-            id: `${convId}_a_${i}`,
-            author: "ASSISTANT",
-            role: "assistant",
-            parts: [{ text: modelTurns[i].innerText.trim() }],
-            created_at: new Date().toISOString(),
-            step_index: messages.length
-          });
-        }
-      }
+      });
 
       if (messages.length > 0) {
-        if (lastActiveSyncedId === convId && messages.length === lastActiveMsgCount) {
+        if (!force && lastActiveSyncedId === convId && messages.length === lastActiveMsgCount) {
+          logDiagnostic("debug", `Aktywny czat ${convId} DOM niezmieniony (${messages.length} msgs), pomijam.`);
           return;
         }
 
-        logDiagnostic("info", `Active chat extracted via DOM fallback: '${title}' (${messages.length} msgs)`);
+        logDiagnostic("info", `Aktywny czat pobrany z DOM: '${title}' (${messages.length} wiadomości)`);
 
         ext.runtime.sendMessage({
           type: "INGEST_PAYLOAD",
@@ -683,9 +751,11 @@
 
         lastActiveSyncedId = convId;
         lastActiveMsgCount = messages.length;
+      } else {
+        logDiagnostic("warn", `DOM fallback: Nie znaleziono wiadomości dla czatu ${convId}. Sprawdź selektory.`);
       }
     } catch (e) {
-      logDiagnostic("error", `DOM scraping fallback error: ${e.message}`);
+      logDiagnostic("error", `Błąd DOM scraping fallback: ${e.message}`);
     }
   }
 
@@ -694,58 +764,8 @@
   // ============================================================================
 
   let isCatchUpRunning = false;
-  let hasAttemptedExpand = false;
 
-  // Expand sidebar if collapsed
-  async function ensureSidebarExpanded() {
-    const existing = document.querySelector('a[href*="/app/"]');
-    if (existing) return true;
-
-    if (hasAttemptedExpand) return false;
-    hasAttemptedExpand = true;
-
-    const expandBtn = document.querySelector(
-      'button[aria-label*="menu" i], button[aria-label*="side" i], button[data-test-id*="menu" i], .side-nav-menu-button'
-    );
-    if (expandBtn) {
-      try {
-        logDiagnostic("debug", "Pasek boczny zwinięty (brak linków /app/). Kliknięto przycisk menu...");
-        expandBtn.click();
-        await new Promise((r) => setTimeout(r, 600));
-        return true;
-      } catch (_) {}
-    }
-    return false;
-  }
-
-  // Find scrollable container for the conversation list in the sidebar
-  function findSidebarScrollContainer() {
-    // 1. Direct search inside sidebar container elements
-    const sidebar = document.querySelector("side-navigation-v2, mat-sidenav, [role='navigation'], aside, .side-nav-menu-button");
-    if (sidebar) {
-      const scroller = sidebar.querySelector("cdk-virtual-scroll-viewport, .mat-drawer-inner-container, infinite-scroller, [class*='infinite-scroller'], [cdkscrollable]");
-      if (scroller && (scroller.scrollHeight > scroller.clientHeight || scroller.clientHeight > 0)) {
-        return scroller;
-      }
-    }
-
-    // 2. Search upwards from first chat link
-    const firstLink = document.querySelector("side-navigation-v2 a[href*='/app/'], mat-sidenav a[href*='/app/'], a[href*='/app/']");
-    if (firstLink) {
-      let current = firstLink.parentElement;
-      while (current && current !== document.body) {
-        const style = window.getComputedStyle(current);
-        const overflowY = style.overflowY || "";
-        if ((overflowY === "auto" || overflowY === "scroll") && current.scrollHeight > current.clientHeight) {
-          return current;
-        }
-        current = current.parentElement;
-      }
-    }
-
-    return document.querySelector("cdk-virtual-scroll-viewport, side-navigation-v2 infinite-scroller, mat-sidenav infinite-scroller, [role='navigation'] infinite-scroller, infinite-scroller");
-  }
-
+  // Passive link scanner for sidebar (zero DOM manipulation, zero clicks, zero scrolling)
   function collectVisibleLinks(conversationsMap) {
     const links = document.querySelectorAll('a[href*="/app/"]');
     let addedCount = 0;
@@ -782,6 +802,11 @@
     return addedCount;
   }
 
+  /**
+   * Discover conversations cleanly and completely non-intrusively:
+   * 1. Primary: Google's native RPC MaZiqc discovers up to 100/200 pinned & recent chats instantly in background.
+   * 2. Passive Fallback: Read any existing visible /app/ links from current DOM without clicking or scrolling.
+   */
   async function discoverAllSidebarConversations(deepScan = false) {
     const conversations = new Map();
 
@@ -804,63 +829,14 @@
       logDiagnostic("warn", `[Smart Catch-Up] Błąd pobierania katalogu przez MaZiqc: ${rpcErr.message}`);
     }
 
-    // 2. Also scan DOM sidebar to catch any local UI state
-    await ensureSidebarExpanded();
-    await new Promise((r) => setTimeout(r, 400));
-    collectVisibleLinks(conversations);
-
-    const container = findSidebarScrollContainer();
-    if (container) {
-      const maxSteps = deepScan ? 100 : 25;
-      let idleChecksAtBottom = 0;
-      let lastHeight = container.scrollHeight;
-
-      logDiagnostic("info", `Skanowanie paska historii Gemini (kroki: ${maxSteps}, dotychczas w katalogu: ${conversations.size} czatów)...`);
-
-      for (let step = 0; step < maxSteps; step++) {
-        const buttons = container.querySelectorAll("button");
-        buttons.forEach((btn) => {
-          const txt = (btn.innerText || btn.getAttribute("aria-label") || "").toLowerCase();
-          if (txt.includes("more") || txt.includes("więcej") || txt.includes("starsz") || txt.includes("load") || txt.includes("expand")) {
-            try { btn.click(); } catch (_) {}
-          }
-        });
-
-        container.scrollTop += 600;
-        container.dispatchEvent(new Event("scroll", { bubbles: true }));
-
-        await new Promise((r) => setTimeout(r, 300));
-        const newItems = collectVisibleLinks(conversations);
-
-        // Fixed isAtBottom: container.scrollTop must be > 50 so it doesn't trigger on step 0
-        const isAtBottom = container.scrollTop > 50 && (container.scrollTop + container.clientHeight >= container.scrollHeight - 60);
-        if (newItems > 0) {
-          idleChecksAtBottom = 0;
-        }
-
-        if (isAtBottom) {
-          idleChecksAtBottom++;
-          container.scrollTop = Math.max(0, container.scrollHeight - container.clientHeight - 200);
-          container.dispatchEvent(new Event("scroll", { bubbles: true }));
-          await new Promise((r) => setTimeout(r, 150));
-          container.scrollTop = container.scrollHeight;
-          container.dispatchEvent(new Event("scroll", { bubbles: true }));
-
-          await new Promise((r) => setTimeout(r, 800));
-          const extra = collectVisibleLinks(conversations);
-          if (extra > 0 || container.scrollHeight > lastHeight) {
-            idleChecksAtBottom = 0;
-          }
-          if (idleChecksAtBottom >= 3) {
-            logDiagnostic("debug", "Osiągnięto początek historii czatów w pasku bocznym.");
-            break;
-          }
-        }
-        lastHeight = container.scrollHeight;
+    // 2. Passive scan: collect any visible links from DOM (zero clicking, zero scroll events)
+    try {
+      const domCount = collectVisibleLinks(conversations);
+      if (domCount > 0) {
+        logDiagnostic("debug", `[Smart Catch-Up] Dodano ${domCount} rozmów z aktualnie otwartego paska bocznego.`);
       }
-
-      container.scrollTop = 0;
-      container.dispatchEvent(new Event("scroll", { bubbles: true }));
+    } catch (domErr) {
+      logDiagnostic("debug", `[Smart Catch-Up] Błąd pasywnego odczytu linków: ${domErr.message}`);
     }
 
     return Array.from(conversations.values());
@@ -991,11 +967,14 @@
   // ============================================================================
 
   // Listen for background alarm triggers
-  ext.runtime.onMessage.addListener((msg) => {
+  ext.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     if (msg.type === "TRIGGER_DELTA_SYNC" || msg.type === "TRIGGER_FULL_BACKFILL") {
-      syncActiveChat();
+      logDiagnostic("info", `Odebrano sygnał ${msg.type} (force: ${Boolean(msg.force)}) dla ${window.location.pathname}`);
+      syncActiveChat(Boolean(msg.force));
       const isDeep = msg.type === "TRIGGER_FULL_BACKFILL";
       setTimeout(() => runSmartCatchUpSync(isDeep), 800);
+      if (sendResponse) sendResponse({ status: "acknowledged", convId: window.location.pathname });
+      return true;
     }
   });
 

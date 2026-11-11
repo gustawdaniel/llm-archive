@@ -4,7 +4,7 @@ import yaml
 from pathlib import Path
 from typing import Tuple
 from ..models import NormalizedConversation, NormalizedMessage, ToolCallRecord
-from ..naming import conversation_rel_path
+from ..naming import avoid_collision, conversation_rel_path
 
 
 class MarkdownGenerator:
@@ -124,6 +124,10 @@ class MarkdownGenerator:
         slug = re.sub(r"[-\s]+", "-", clean_title).strip("-")[:60] or "conversation"
         short_id = conversation.external_id[:8]
         rel_path = conversation_rel_path(conversation.platform, date_str, slug, short_id)
+
+        # Dwie rozmowy mogą dzielić pierwsze 8 znaków id — wtedy nie nadpisujemy
+        # cudzej notatki, tylko dopisujemy sufiks z hasha pełnego id.
+        rel_path = avoid_collision(rel_path, conversation.external_id)
 
         return full_md, rel_path
 

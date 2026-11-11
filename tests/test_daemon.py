@@ -123,3 +123,54 @@ async def test_http_forwarder_success():
         # Buffer should have 0 pending sessions
         assert len(buffer.get_pending()) == 0
 
+
+
+def test_canonical_title_roundtrip():
+    """Bufor pamięta tytuł nadany przez AutoTitler, żeby urządzenie nie wymyślało
+    własnego sluga w nazwie pliku (to właśnie mnożyło kopie rozmów)."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        buffer = SQLiteWALBuffer(Path(tmpdir) / "buf.db")
+
+        assert buffer.get_canonical("conv-1") is None
+
+        buffer.set_canonical("conv-1", "Porządki w ClickUp", "antigravity/2026-11-08_porzadki-w-clickup_abcd1234-mac.md", "sha-1")
+        stored = buffer.get_canonical("conv-1")
+        assert stored["title"] == "Porządki w ClickUp"
+        assert stored["rel_path"].endswith("-mac.md")
+        assert stored["content_sha256"] == "sha-1"
+
+        # Nowy tytuł nadpisuje ścieżkę, ale nie gubi hasha poprzedniej treści,
+        # dopóki nie zapiszemy nowej (COALESCE).
+        buffer.set_canonical("conv-1", "Inny tytuł", "antigravity/2026-11-08_inny-tytul_abcd1234-mac.md")
+        stored = buffer.get_canonical("conv-1")
+        assert stored["title"] == "Inny tytuł"
+        assert stored["content_sha256"] == "sha-1"
+
+
+def test_forwarder_remembers_canonical_title_from_response():
+    import json as _json
+
+    class FakeResponse:
+        status_code = 200
+
+        def __init__(self, payload):
+            self._payload = payload
+
+        def json(self):
+            return self._payload
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        buffer = SQLiteWALBuffer(Path(tmpdir) / "buf.db")
+        forwarder = HTTPForwarder(buffer, ingest_url="http://example.invalid/api/v1/ingest")
+
+        forwarder._remember_canonical(
+            "conv-2",
+            FakeResponse({"title": "Migracja CLI", "relative_path": "antigravity/2026-11-08_migracja-cli_abcd1234-apps.md"}),
+        )
+        stored = buffer.get_canonical("conv-2")
+        assert stored["title"] == "Migracja CLI"
+        assert stored["rel_path"].endswith("-apps.md")
+
+        # Odpowiedź bez tytułu nie może wyczyścić zapamiętanej wartości.
+        forwarder._remember_canonical("conv-2", FakeResponse({"status": "success"}))
+        assert buffer.get_canonical("conv-2")["title"] == "Migracja CLI"

@@ -22,8 +22,18 @@
         details,
         timestamp: new Date().toISOString()
       });
-      if (p && p.catch) p.catch(() => {});
-    } catch (_) {}
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          if (!err?.message?.includes("Extension context invalidated")) {
+            console.debug("[Brain Log Relay]", err?.message || err);
+          }
+        });
+      }
+    } catch (err) {
+      if (!err?.message?.includes("Extension context invalidated")) {
+        console.debug("[Brain Log Relay]", err?.message || err);
+      }
+    }
   }
 
   logDiagnostic("info", `Grok content script active on ${window.location.hostname}${window.location.pathname}`);
@@ -55,7 +65,9 @@
               if (typeof url === "string" && (url.includes("/rest/app-chat/conversations") || url.includes("/chat/completion") || url.includes("/responses"))) {
                 window.postMessage({ type: "GROK_ACTIVITY_COMPLETED" }, "*");
               }
-            } catch (_) {}
+            } catch (urlErr) {
+              console.debug("[Brain Grok Hook Parse]", urlErr);
+            }
             return response;
           };
         })();

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import logging
 import os
 import re
@@ -10,7 +11,8 @@ import httpx
 
 from ..config import settings
 from ..database import Database
-from ..naming import conversation_rel_path
+from ..naming import avoid_collision, conversation_rel_path
+from ..markdown_store import write_if_changed
 
 logger = logging.getLogger("llm-archive.auto_titler")
 
@@ -155,6 +157,8 @@ class AutoTitler:
         date_str = started_at.strftime("%Y-%m-%d")
         short_id = external_id[:8]
         new_rel_path = conversation_rel_path(platform, date_str, slug, short_id)
+        # ta sama ochrona co w MarkdownGenerator: nie przejmujemy cudzej nazwy
+        new_rel_path = avoid_collision(new_rel_path, external_id)
 
         async with self.db.pool.acquire() as conn:
             # 1. Update llm_conversations
@@ -198,9 +202,10 @@ class AutoTitler:
                     UPDATE llm_documents
                     SET relative_path = $1,
                         content_markdown = $2,
+                        hash_sha256 = $3,
                         updated_at = NOW()
-                    WHERE id = $3;
-                """, new_rel_path, updated_md, doc_row["id"])
+                    WHERE id = $4;
+                """, new_rel_path, updated_md, hashlib.sha256(updated_md.encode("utf-8")).hexdigest(), doc_row["id"])
 
                 # 3. Rename physical markdown file if export directory is present
                 export_dir = settings.MARKDOWN_EXPORT_DIR
@@ -210,8 +215,7 @@ class AutoTitler:
                         new_file = export_dir / new_rel_path
                         if old_file.is_file() and old_file != new_file:
                             old_file.unlink(missing_ok=True)
-                        new_file.parent.mkdir(parents=True, exist_ok=True)
-                        new_file.write_text(updated_md, encoding="utf-8")
+                        write_if_changed(new_file, updated_md)
                         logger.debug(f"Updated markdown file: {new_rel_path}")
                     except Exception as fe:
                         logger.warning(f"Could not update file on disk ({fe}), DB updated successfully.")

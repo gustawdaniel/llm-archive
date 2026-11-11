@@ -3,6 +3,11 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
+# BASE_PATH jest wczytywany przez svelte.config.js w czasie BUDOWANIA,
+# więc musi być znany tutaj — nie wystarczy zmienna w runtime kontenera.
+ARG BASE_PATH=/llm-archive
+ENV BASE_PATH=${BASE_PATH}
+
 RUN npm install -g pnpm
 
 COPY package.json pnpm-lock.yaml ./

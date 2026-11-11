@@ -9,11 +9,12 @@ import uvicorn
 
 from ..config import settings
 from ..daemon.watcher import LocalAgentWatcher
-from ..normalizers import AntigravityNormalizer, ClaudeCodeNormalizer, CodexNormalizer, ChatGPTNormalizer, ClaudeWebNormalizer, MarkdownGenerator
+from ..normalizers import AntigravityNormalizer, ClaudeCodeNormalizer, CodexNormalizer, KimiCodeNormalizer, ChatGPTNormalizer, ClaudeWebNormalizer, MarkdownGenerator
 from ..chunker import SemanticChunker
 from ..embedder import Embedder
 from ..database import Database
 from ..models import SearchQuery
+from ..markdown_store import write_if_changed
 
 app = typer.Typer(name="brain-llm", help="Centralized LLM archive & semantic retrieval CLI.")
 console = Console()
@@ -30,7 +31,7 @@ def scan():
     table.add_column("Rozmiar", justify="right")
 
     for f in files:
-        plat = "antigravity" if "antigravity-ide" in str(f) else "claude_code"
+        plat = "antigravity" if "antigravity-ide" in str(f) else "kimi_code" if ".kimi-code" in str(f) else "claude_code"
         table.add_row(plat, str(f), f"{f.stat().st_size:,} B")
 
     console.print(table)
@@ -68,18 +69,19 @@ def ingest(
 
         for f in files:
             is_antigravity = "antigravity-ide" in str(f)
+            is_kimi = ".kimi-code" in str(f) and f.name == "wire.jsonl"
             if is_antigravity:
                 norm = AntigravityNormalizer()
             elif f.name.startswith("rollout-"):
                 norm = CodexNormalizer()
+            elif is_kimi:
+                norm = KimiCodeNormalizer()
             else:
                 norm = ClaudeCodeNormalizer()
             try:
                 conv = norm.parse(f)
                 md_content, rel_path = MarkdownGenerator.generate(conv)
-                target_file = settings.MARKDOWN_EXPORT_DIR / rel_path
-                target_file.parent.mkdir(parents=True, exist_ok=True)
-                target_file.write_text(md_content, encoding="utf-8")
+                write_if_changed(settings.MARKDOWN_EXPORT_DIR / rel_path, md_content)
 
                 db_status = ""
                 if db and embedder:

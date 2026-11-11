@@ -26,15 +26,21 @@ from ..normalizers import (
     ZedNormalizer,
     HermesNormalizer,
     CodexNormalizer,
+    GooseNormalizer,
     MarkdownGenerator,
 )
 from ..normalizers.mirror import MirrorNormalizer
 from ..chunker import SemanticChunker
 from ..embedder import Embedder
 from ..database import Database
+from ..markdown_store import file_matches, remove_if_unchanged, write_if_changed
+from ..observability import init_error_reporting
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("llm-archive")
+
+# Jak najwcześniej, żeby integracja FastAPI/Starlette objęła całą aplikację.
+init_error_reporting()
 
 import asyncio
 from contextlib import asynccontextmanager
@@ -234,6 +240,7 @@ async def ingest_conversation(
         "hermes": HermesNormalizer(),
         "codex": CodexNormalizer(),
         "mirror": MirrorNormalizer(),
+        "goose": GooseNormalizer(),
     }
 
     norm = normalizers.get(req.platform.lower())
@@ -277,6 +284,8 @@ async def ingest_conversation(
                 conv.model = "claude-3-7-sonnet"
             elif conv.platform == "cline":
                 conv.model = "deepseek-v4.1-flash"
+            elif conv.platform == "goose":
+                conv.model = "deepseek-flash"
 
     # Never silently accept an empty result: this is the exact failure mode
     # that lost real data before (server parsed 0 messages from a well-formed
@@ -301,25 +310,33 @@ async def ingest_conversation(
             detail=f"Refusing to upsert {req.platform}:{req.external_id}: all {len(conv.messages)} messages have empty content."
         )
 
-    # 1. Generate Markdown with YAML frontmatter
-    md_content, rel_path = MarkdownGenerator.generate(conv)
-
-    # 2. Write Markdown directly to the doc/llm-archive Obsidian vault
-    target_md_file = settings.MARKDOWN_EXPORT_DIR / rel_path
-    target_md_file.parent.mkdir(parents=True, exist_ok=True)
-    target_md_file.write_text(md_content, encoding="utf-8")
-
     if not db.pool:
         # Previously this silently skipped the DB write and still returned
         # "status": "success" - a client had no way to know nothing was
         # persisted. Loud failure lets the daemon's retry/backoff do its job.
         raise HTTPException(status_code=503, detail="Database is not connected - ingest not persisted, retry.")
 
+    sync_status = await db.get_conversation_sync_status(conv.platform, conv.external_id)
+
+    # An auto-generated title (AutoTitler) is the canonical one. Without this the
+    # transcript's own title (e.g. "148/24") would win on every re-ingest, the slug
+    # in the filename would flip-flop, and each flip left one more orphan copy of a
+    # multi-megabyte conversation in the vault.
+    if sync_status and sync_status.get("title_generated_at") and sync_status.get("title"):
+        conv.title = sync_status["title"]
+
+    # 1. Generate Markdown with YAML frontmatter
+    md_content, rel_path = MarkdownGenerator.generate(conv)
+    target_md_file = settings.MARKDOWN_EXPORT_DIR / rel_path
     doc_hash = hashlib.sha256(md_content.encode("utf-8")).hexdigest()
 
-    # Fast-path: if conversation already exists with the exact same content hash, skip all re-chunking/embedding
-    sync_status = await db.get_conversation_sync_status(conv.platform, conv.external_id)
+    # Fast-path: if conversation already exists with the exact same content hash, skip all re-chunking/embedding.
+    # The markdown is still written when missing/different on disk (vault can be restored from
+    # backup or pruned by hand), but an identical file is never touched - otherwise every poll of
+    # a live session rewrote megabytes and Syncthing pushed them across the tailnet.
     if sync_status and sync_status.get("hash_sha256") == doc_hash:
+        if not file_matches(target_md_file, md_content):
+            write_if_changed(target_md_file, md_content)
         await db.touch_conversation(sync_status["id"])
         return {
             "status": "success",
@@ -332,6 +349,17 @@ async def ingest_conversation(
             "total_messages": len(conv.messages),
             "embeddings_status": "cached_unchanged",
         }
+
+    # 2. Write Markdown directly to the doc/llm-archive Obsidian vault (only when content changed)
+    write_if_changed(target_md_file, md_content)
+
+    # The filename changed (title was retitled): drop the superseded file so the
+    # vault keeps one copy of the conversation instead of one per historical title.
+    old_rel_path = (sync_status or {}).get("relative_path")
+    if old_rel_path and old_rel_path != rel_path:
+        old_file = settings.MARKDOWN_EXPORT_DIR / old_rel_path
+        if old_file.resolve() != target_md_file.resolve():
+            remove_if_unchanged(old_file, (sync_status or {}).get("hash_sha256"))
 
     # 3. Create semantic chunks
     chunks = chunker.chunk_conversation(conv)

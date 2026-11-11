@@ -85,6 +85,12 @@
 			color: '#8b5cf6',
 			bg: 'rgba(139, 92, 246, 0.12)',
 			border: 'rgba(139, 92, 246, 0.35)'
+		},
+		goose: {
+			label: 'Goose',
+			color: '#14b8a6',
+			bg: 'rgba(20, 184, 166, 0.12)',
+			border: 'rgba(20, 184, 166, 0.35)'
 		}
 	};
 

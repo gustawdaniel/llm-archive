@@ -57,7 +57,7 @@ export function buildSourceUrl(platform: string, externalId: string | undefined 
 }
 
 /** Platforms that are local CLI/IDE tools with no web-viewable conversation at all. */
-export const LOCAL_PLATFORMS = new Set(['antigravity', 'claude_code', 'cline', 'opencode', 'aider', 'omp', 'zed', 'hermes', 'codex']);
+export const LOCAL_PLATFORMS = new Set(['antigravity', 'claude_code', 'cline', 'opencode', 'aider', 'omp', 'zed', 'hermes', 'codex', 'goose']);
 
 export function isLocalPlatform(platform: string): boolean {
 	return LOCAL_PLATFORMS.has(platform);

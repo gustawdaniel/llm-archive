@@ -49,7 +49,8 @@ uv run python -m src.cli.main import-takeout /sciezka/do/takeout-extracted
 make watch
 
 # 6. Uruchomienie serwera Ingest & Search API lokalnie do developmentu (port 8080)
-# Produkcyjnie API działa jako kontener Docker na brain-db — patrz docs/network_and_sync.md
+# Produkcyjnie API działa jako kontener Docker w instancji `apps` (obraz z GHCR,
+# compose z `apps/llm-archive/compose.yaml`)
 make serve
 ```
 
@@ -60,7 +61,7 @@ make serve
 Historia z lokalnych sesji Antigravity i Claude Code trafia do archiwum dwiema **niezależnymi** ścieżkami — ważne żeby ich nie mylić:
 
 1. **Import historyczny / zbiorczy (`brain-llm import-takeout`, jednorazowy)** — parsuje wszystkie pliki na dysku i embeduje je lokalnie (wymaga Ollamy z modelem `bge-m3` na maszynie, na której uruchamiasz import). Używać do pierwszego załadowania danych albo dużego backfillu.
-2. **Demon czasu rzeczywistego (`daemon/agent_watcher.py`, ciągły)** — pollowanie plików transkryptów co 5s, buforowanie w lokalnym SQLite WAL (`~/.local/share/brain-llm/local_buffer.db`) i wysyłka przez HTTP do `POST /api/v1/ingest` na `brain-db`. Embedding liczony jest **po stronie serwera** (nie potrzeba lokalnej Ollamy). To jedyny mechanizm, który dowozi *nowe* wiadomości bez ręcznego importu.
+2. **Demon czasu rzeczywistego (`daemon/agent_watcher.py`, ciągły)** — pollowanie plików transkryptów co 5s, buforowanie w lokalnym SQLite WAL (`~/.local/share/brain-llm/local_buffer.db`) i wysyłka przez HTTP do `POST /api/v1/ingest` na serwer Brain OS. Embedding liczony jest **po stronie serwera** (nie potrzeba lokalnej Ollamy). To jedyny mechanizm, który dowozi *nowe* wiadomości bez ręcznego importu.
 
 **Demon musi działać osobno na każdej maszynie, na której pracujesz z agentami:**
 

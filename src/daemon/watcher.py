@@ -9,8 +9,9 @@ from typing import List, Optional
 import httpx
 
 from ..config import settings
-from ..normalizers import AntigravityNormalizer, ClaudeCodeNormalizer, CodexNormalizer, MarkdownGenerator
+from ..normalizers import AntigravityNormalizer, ClaudeCodeNormalizer, CodexNormalizer, KimiCodeNormalizer, MarkdownGenerator
 from ..chunker import SemanticChunker
+from ..markdown_store import write_if_changed
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
 logger = logging.getLogger("llm-daemon")
@@ -30,6 +31,7 @@ class LocalAgentWatcher:
 
         self.antigravity_norm = AntigravityNormalizer()
         self.claude_norm = ClaudeCodeNormalizer()
+        self.kimi_norm = KimiCodeNormalizer()
 
     def _init_sqlite(self):
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -72,6 +74,13 @@ class LocalAgentWatcher:
                 if p.is_file() and p.stat().st_size > 0:
                     discovered.append(p)
 
+        # 4. Kimi Code
+        kimi_sessions = Path.home() / ".kimi-code" / "sessions"
+        if kimi_sessions.is_dir():
+            for p in kimi_sessions.glob("*/session_*/agents/main/wire.jsonl"):
+                if p.is_file() and p.stat().st_size > 0:
+                    discovered.append(p)
+
         return discovered
 
     def get_pending_files(self) -> List[Path]:
@@ -96,7 +105,8 @@ class LocalAgentWatcher:
         stat = file_path.stat()
         is_antigravity = "antigravity-ide" in str(file_path)
         is_codex = file_path.name.startswith("rollout-")
-        platform = "antigravity" if is_antigravity else "codex" if is_codex else "claude_code"
+        is_kimi = ".kimi-code" in str(file_path) and file_path.name == "wire.jsonl"
+        platform = "antigravity" if is_antigravity else "codex" if is_codex else "kimi_code" if is_kimi else "claude_code"
 
         logger.info(f"Ingesting {platform} file: {file_path}")
 
@@ -106,15 +116,18 @@ class LocalAgentWatcher:
                 conv = self.antigravity_norm.parse(file_path)
             elif is_codex:
                 conv = CodexNormalizer().parse(file_path)
+            elif is_kimi:
+                conv = self.kimi_norm.parse(file_path)
             else:
                 conv = self.claude_norm.parse(file_path)
 
-            # 2. Always write Markdown locally immediately (guarantees offline Obsidian sync)
+            # 2. Always write Markdown locally immediately (guarantees offline Obsidian sync).
+            # Never rewrite an identical file: this loop runs every few seconds, and an
+            # unconditional write of a multi-megabyte note kept Syncthing permanently busy.
             md_content, rel_path = MarkdownGenerator.generate(conv)
             md_file = settings.MARKDOWN_EXPORT_DIR / rel_path
-            md_file.parent.mkdir(parents=True, exist_ok=True)
-            md_file.write_text(md_content, encoding="utf-8")
-            logger.info(f"Wrote markdown to: {md_file}")
+            if write_if_changed(md_file, md_content):
+                logger.info(f"Wrote markdown to: {md_file}")
 
             # 3. Post to central API over Tailscale/localhost
             async with httpx.AsyncClient(timeout=10.0) as client:

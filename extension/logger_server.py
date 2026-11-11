@@ -9,10 +9,12 @@ and writes structured JSONL records to extension/logs/sync.log.
 import json
 import os
 import sys
+import threading
 import urllib.request
 import urllib.error
 from datetime import datetime, timezone
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 from pathlib import Path
 
 PORT = 3040
@@ -22,6 +24,7 @@ LOG_FILE = LOGS_DIR / "sync.log"
 
 MAX_MEMORY_LOGS = 1000
 memory_logs = []
+logs_lock = threading.Lock()
 
 # Terminal colors
 COLOR_RESET = "\033[0m"
@@ -66,15 +69,16 @@ class DiagnosticHandler(BaseHTTPRequestHandler):
                     "details": details
                 }
 
-                # Memory buffer
-                memory_logs.append(record)
-                if len(memory_logs) > MAX_MEMORY_LOGS:
-                    memory_logs.pop(0)
+                # Memory buffer & file append (thread-safe)
+                with logs_lock:
+                    memory_logs.append(record)
+                    if len(memory_logs) > MAX_MEMORY_LOGS:
+                        memory_logs.pop(0)
 
-                # Append to file
-                LOGS_DIR.mkdir(parents=True, exist_ok=True)
-                with open(LOG_FILE, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(record, ensure_ascii=False) + "\n")
+                    # Append to file
+                    LOGS_DIR.mkdir(parents=True, exist_ok=True)
+                    with open(LOG_FILE, "a", encoding="utf-8") as f:
+                        f.write(json.dumps(record, ensure_ascii=False) + "\n")
 
                 # Console format
                 color = {
@@ -142,9 +146,10 @@ class DiagnosticHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/clear":
-            memory_logs.clear()
-            if LOG_FILE.exists():
-                LOG_FILE.write_text("", encoding="utf-8")
+            with logs_lock:
+                memory_logs.clear()
+                if LOG_FILE.exists():
+                    LOG_FILE.write_text("", encoding="utf-8")
             self.send_response(200)
             self._set_cors_headers()
             self.send_header("Content-Type", "application/json")
@@ -178,11 +183,13 @@ class DiagnosticHandler(BaseHTTPRequestHandler):
             return
 
         if self.path == "/logs":
+            with logs_lock:
+                logs_snapshot = list(memory_logs)
             self.send_response(200)
             self._set_cors_headers()
             self.send_header("Content-Type", "application/json")
             self.end_headers()
-            self.wfile.write(json.dumps(memory_logs, indent=2, ensure_ascii=False).encode("utf-8"))
+            self.wfile.write(json.dumps(logs_snapshot, indent=2, ensure_ascii=False).encode("utf-8"))
             return
 
         if self.path in ("/device", "/config", "/info"):
@@ -220,11 +227,17 @@ class DiagnosticHandler(BaseHTTPRequestHandler):
         pass
 
 
+class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
+    """Multi-threaded HTTP server to prevent slow upstream requests from blocking local telemetry/health."""
+    daemon_threads = True
+    allow_reuse_address = True
+
+
 def run():
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
     server_address = ("127.0.0.1", PORT)
-    httpd = HTTPServer(server_address, DiagnosticHandler)
-    print(f"\n{COLOR_GREEN}=== Brain Extension Diagnostic Logger Server ==={COLOR_RESET}")
+    httpd = ThreadedHTTPServer(server_address, DiagnosticHandler)
+    print(f"\n{COLOR_GREEN}=== Brain Extension Diagnostic Logger Server (Threaded) ==={COLOR_RESET}")
     print(f"Listening on: {COLOR_CYAN}http://127.0.0.1:{PORT}{COLOR_RESET}")
     print(f"Writing to:   {COLOR_CYAN}{LOG_FILE}{COLOR_RESET}")
     print(f"Endpoints:    {COLOR_GRAY}POST /log, GET /logs, POST /clear{COLOR_RESET}\n", flush=True)

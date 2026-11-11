@@ -1,8 +1,8 @@
 services:
   llm-archive-api:
     # Built in CI (see .github/workflows/llm-archive-api.yml), pushed to ghcr.io.
-    # No `build:` stanza on purpose: this host only ever pulls this tag via
-    # deploy-dispatch.sh, it never builds an image locally.
+    # No `build:` stanza on purpose: the host only ever pulls this tag from
+    # GHCR, it never builds an image locally (model PULL).
     image: ghcr.io/gustawdaniel/brain-llm-archive-api:latest
     container_name: brain-llm-api
     # Bounded, not infinite: a silent forever-flapping container hides real

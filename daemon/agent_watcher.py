@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import hashlib
 import logging
 import os
 import sqlite3
@@ -21,9 +22,11 @@ from src.normalizers import (
     ZedNormalizer,
     HermesNormalizer,
     CodexNormalizer,
+    GooseNormalizer,
     MarkdownGenerator
 )
 from src.normalizers.mirror import MirrorNormalizer
+from src.markdown_store import remove_if_unchanged, write_if_changed
 from daemon.forwarder import SQLiteWALBuffer, HTTPForwarder
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
@@ -59,6 +62,7 @@ class AgentWatcherDaemon:
         self.hermes_norm = HermesNormalizer()
         self.codex_norm = CodexNormalizer()
         self.mirror_norm = MirrorNormalizer()
+        self.goose_norm = GooseNormalizer()
 
         # Track (filepath, mtime, size) to avoid redundant re-parsing.
         # Seeded from SQLite buffer so restarts don't re-parse already-synced files.
@@ -174,17 +178,41 @@ class AgentWatcherDaemon:
                 if cf.is_file() and cf.stat().st_size > 0:
                     files.append(cf)
 
+        # 10. Goose sessions database (~/.local/share/goose/sessions/sessions.db)
+        goose_db = getattr(settings, "GOOSE_DB", Path.home() / ".local" / "share" / "goose" / "sessions" / "sessions.db")
+        if goose_db.is_file() and goose_db.stat().st_size > 0:
+            files.append(goose_db)
+
         return files
 
     def _buffer_and_export_conv(self, conv, platform: str, file_key: str, mtime: float, size: int):
         if not conv or not conv.messages:
             return
 
-        # 1. Generate local Markdown file immediately (Obsidian sync guarantee)
+        # 1. Generate local Markdown file immediately (Obsidian sync guarantee).
+        # Only when the content actually changed: this daemon rescans every 15 s and an
+        # unconditional write of a multi-megabyte note kept Syncthing and Obsidian busy.
+        #
+        # Tytuł: jeśli serwer nadał tej rozmowie tytuł (AutoTitler), używamy jego, a nie
+        # surowego tytułu transkryptu. Inaczej Mac/rog pisały plik pod innym slugiem niż
+        # baza i każda zmiana tytułu zostawiała w archiwum kolejną kopię rozmowy.
+        canonical = self.buffer.get_canonical(conv.external_id)
+        if canonical and canonical.get("title"):
+            conv.title = canonical["title"]
+
         md_content, rel_path = MarkdownGenerator.generate(conv)
-        target_md_file = settings.MARKDOWN_EXPORT_DIR / rel_path
-        target_md_file.parent.mkdir(parents=True, exist_ok=True)
-        target_md_file.write_text(md_content, encoding="utf-8")
+        target_path = settings.MARKDOWN_EXPORT_DIR / rel_path
+        md_sha = hashlib.sha256(md_content.encode("utf-8")).hexdigest()
+
+        previous_rel_path = (canonical or {}).get("rel_path")
+        if previous_rel_path and previous_rel_path != rel_path:
+            remove_if_unchanged(
+                settings.MARKDOWN_EXPORT_DIR / previous_rel_path,
+                (canonical or {}).get("content_sha256"),
+            )
+
+        write_if_changed(target_path, md_content)
+        self.buffer.set_canonical(conv.external_id, conv.title or "", rel_path, md_sha)
 
         # 2. Buffer in SQLite WAL for HTTP forwarding
         ingest_payload = {
@@ -337,6 +365,42 @@ class AgentWatcherDaemon:
                 self.seen_files[file_key] = (stat.st_mtime, stat.st_size)
             except Exception as e:
                 logger.warning(f"Error reading Mirror database: {e}")
+            return
+
+        # Special handling for Goose sessions DB: multiple sessions inside sessions.db
+        if file_key.endswith("sessions.db") and "goose" in file_key:
+            if last_stat and last_stat[0] == stat.st_mtime and last_stat[1] == stat.st_size:
+                return
+            try:
+                conn = sqlite3.connect(f"file:{file_path}?mode=ro", uri=True)
+                cur = conn.cursor()
+                cur.execute("SELECT id, updated_at FROM sessions")
+                rows = cur.fetchall()
+                conn.close()
+                for sid, updated_at_str in rows:
+                    sub_key = f"{file_key}#{sid}"
+                    last_sub = self.seen_files.get(sub_key)
+                    t_val = 0.0
+                    if updated_at_str:
+                        try:
+                            clean_ts = str(updated_at_str).replace("Z", "+00:00")
+                            dt = datetime.fromisoformat(clean_ts)
+                            if dt.tzinfo is None:
+                                dt = dt.replace(tzinfo=timezone.utc)
+                            t_val = dt.timestamp()
+                        except Exception:
+                            t_val = stat.st_mtime
+                    if last_sub and last_sub[0] == t_val:
+                        continue
+                    try:
+                        conv = self.goose_norm.parse(file_path, {"session_id": sid})
+                        if conv.messages:
+                            self._buffer_and_export_conv(conv, "goose", sub_key, t_val, 0)
+                    except Exception as ex:
+                        logger.warning(f"Error parsing Goose session {sid}: {ex}")
+                self.seen_files[file_key] = (stat.st_mtime, stat.st_size)
+            except Exception as e:
+                logger.warning(f"Error reading Goose database: {e}")
             return
 
         if last_stat and last_stat[0] == stat.st_mtime and last_stat[1] == stat.st_size:

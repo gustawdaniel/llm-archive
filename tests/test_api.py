@@ -241,3 +241,96 @@ def test_conversation_detail_trims_large_tool_outputs():
 
         full = client.get("/api/v1/conversations/c1?full_tools=true").json()
         assert full["messages"][0]["tool_calls"][0]["output"] == screenshot
+
+
+def _chatgpt_payload(external_id: str, text: str = "Hello via API test!") -> dict:
+    return {
+        "platform": "chatgpt",
+        "external_id": external_id,
+        "raw_data": {
+            "id": external_id,
+            "title": "148/24",
+            "create_time": 1774000000.0,
+            "update_time": 1774000010.0,
+            "mapping": {
+                "root": {"id": "root", "parent": None, "children": ["m1"]},
+                "m1": {
+                    "id": "m1", "parent": "root", "children": ["m2"],
+                    "message": {
+                        "id": "m1", "author": {"role": "user"}, "create_time": 1774000000.0,
+                        "content": {"content_type": "text", "parts": [text]},
+                    },
+                },
+                "m2": {
+                    "id": "m2", "parent": "m1", "children": [],
+                    "message": {
+                        "id": "m2", "author": {"role": "assistant"}, "create_time": 1774000005.0,
+                        "content": {"content_type": "text", "parts": ["Received."]},
+                    },
+                },
+            },
+        },
+        "metadata": {"device": "test-workstation"},
+    }
+
+
+def test_ingest_reuses_generated_title_and_drops_old_file(tmp_path):
+    """AutoTitler title must win over the transcript title, otherwise the filename
+    slug flip-flops on every re-ingest and leaves orphan copies of the conversation."""
+    import hashlib
+    from datetime import datetime, timezone
+    from src.naming import conversation_rel_path
+
+    old_rel = conversation_rel_path("chatgpt", "2026-03-20", "14824", "titled12")
+    old_file = tmp_path / old_rel
+    old_file.parent.mkdir(parents=True, exist_ok=True)
+    old_file.write_text("# stara wersja\n", encoding="utf-8")
+    old_hash = hashlib.sha256(old_file.read_bytes()).hexdigest()
+
+    with patch("src.service.api.settings.MARKDOWN_EXPORT_DIR", tmp_path), \
+         patch("src.service.api.db.get_conversation_sync_status", new_callable=AsyncMock) as mock_sync, \
+         patch("src.service.api.db.touch_conversation", new_callable=AsyncMock):
+        mock_sync.return_value = {
+            "id": "conv-1",
+            "title": "Porządki w ClickUp",
+            "title_generated_at": datetime.now(timezone.utc),
+            "hash_sha256": old_hash,
+            "relative_path": old_rel,
+        }
+        res = client.post("/api/v1/ingest", json=_chatgpt_payload("titled123"))
+
+    assert res.status_code == 200
+    new_rel = res.json()["relative_path"]
+    assert "porządki-w-clickup" in new_rel
+    assert res.json()["title"] == "Porządki w ClickUp"
+    assert (tmp_path / new_rel).is_file()
+    assert not old_file.exists(), "superseded file must be removed, not left as a duplicate"
+
+
+def test_ingest_does_not_rewrite_unchanged_markdown(tmp_path):
+    """Second ingest of identical content must leave the file's mtime untouched
+    (Syncthing would otherwise ship megabytes across the tailnet on every poll)."""
+    import hashlib
+    with patch("src.service.api.settings.MARKDOWN_EXPORT_DIR", tmp_path), \
+         patch("src.service.api.db.get_conversation_sync_status", new_callable=AsyncMock) as mock_sync, \
+         patch("src.service.api.db.touch_conversation", new_callable=AsyncMock):
+        mock_sync.return_value = None
+        first = client.post("/api/v1/ingest", json=_chatgpt_payload("same123"))
+        assert first.status_code == 200
+        target = tmp_path / first.json()["relative_path"]
+        before = target.stat()
+
+        digest = hashlib.sha256(target.read_bytes()).hexdigest()
+        mock_sync.return_value = {
+            "id": "conv-2",
+            "title": "cokolwiek",
+            "title_generated_at": None,
+            "hash_sha256": digest,
+            "relative_path": first.json()["relative_path"],
+        }
+        second = client.post("/api/v1/ingest", json=_chatgpt_payload("same123"))
+
+    assert second.status_code == 200
+    assert second.json()["embeddings_status"] == "cached_unchanged"
+    assert target.stat().st_mtime == before.st_mtime
+    assert target.stat().st_ino == before.st_ino

@@ -27,8 +27,18 @@
         type: "DIAGNOSTIC_LOG",
         ...record
       });
-      if (p && p.catch) p.catch(() => {});
-    } catch (_) {}
+      if (p && typeof p.catch === "function") {
+        p.catch((err) => {
+          if (!err?.message?.includes("Extension context invalidated")) {
+            console.debug("[Brain Log Relay]", err?.message || err);
+          }
+        });
+      }
+    } catch (err) {
+      if (!err?.message?.includes("Extension context invalidated")) {
+        console.debug("[Brain Log Relay]", err?.message || err);
+      }
+    }
   }
 
   logDiagnostic("info", `Claude content script loaded on ${window.location.hostname}${window.location.pathname}`);

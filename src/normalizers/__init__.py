@@ -14,6 +14,8 @@ from .omp import OMPNormalizer
 from .zed import ZedNormalizer
 from .hermes import HermesNormalizer
 from .codex import CodexNormalizer
+from .kimi_code import KimiCodeNormalizer
+from .goose import GooseNormalizer
 from .markdown_generator import MarkdownGenerator
 
 __all__ = [
@@ -33,6 +35,8 @@ __all__ = [
     "ZedNormalizer",
     "HermesNormalizer",
     "CodexNormalizer",
+    "KimiCodeNormalizer",
+    "GooseNormalizer",
     "MarkdownGenerator",
 ]
 
