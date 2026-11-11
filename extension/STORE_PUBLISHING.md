@@ -48,5 +48,5 @@ Without the secrets the workflow still builds, tests and lints; the store steps 
 
 ## Checks before a release
 
-- `python extension/build.py && pytest -q tests/test_extension.py && npx web-ext@10.8.0 lint --source-dir extension/dist/firefox` — 0 errors, 0 warnings.
+- `python extension/build.py && python -m pytest -q --noconftest tests/test_extension.py::test_extension_build_and_manifests && npx web-ext@10.8.0 lint --source-dir extension/dist/firefox` — 0 errors, 0 warnings.
 - Network destinations stay as described in `PRIVACY.md` (user's archive address, `127.0.0.1:3040`); any new one needs `PRIVACY.md` and the store disclosures updated first.

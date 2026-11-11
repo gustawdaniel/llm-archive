@@ -52,11 +52,13 @@ jobs:
 
       - name: Build packages
         run: |
-          pip install --quiet cryptography pytest pytest-asyncio
+          pip install --quiet cryptography pytest
           python extension/build.py
 
       - name: Test
-        run: pytest -q tests/test_extension.py
+        # only the extension test: the others in this file build monorepo-only apps, and
+        # tests/conftest.py needs the whole backend installed
+        run: python -m pytest -q --noconftest tests/test_extension.py::test_extension_build_and_manifests
 
       - name: Lint (Mozilla web-ext)
         run: npx --yes web-ext@10.8.0 lint --source-dir extension/dist/firefox

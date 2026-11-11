@@ -1,12 +1,12 @@
 {
   "target": "llm-archive",
   "repo": "gustawdaniel/llm-archive",
-  "monorepo_sha": "6b85c8f0f5b587a98c22e929253c1f167774aef8",
-  "monorepo_tag": "v2026.11.3",
-  "monorepo_ref": "v2026.11.3",
-  "timestamp": "2026-11-11T21:26:48.409561+00:00",
+  "monorepo_sha": "a192e0d1d4495e7b2c5e6f6efc30c8d52afd0ca5",
+  "monorepo_tag": "v2026.11.4",
+  "monorepo_ref": "v2026.11.4",
+  "timestamp": "2026-11-11T21:31:48.558590+00:00",
   "files_count": 182,
-  "total_size_bytes": 2008973,
+  "total_size_bytes": 2009227,
   "files": [
     {
       "path": ".gitignore",
@@ -75,8 +75,8 @@
     },
     {
       "path": "extension/STORE_PUBLISHING.md",
-      "size": 3973,
-      "sha256": "7ae403e961b27ca12ff481d4649caf1e72d6cf105f0dd08f82ebcdd2b406a2c8"
+      "size": 4032,
+      "sha256": "11e82300fbba1af0aa02bb97b50dc5451bae668b5bcea911b2b9ef9085a01803"
     },
     {
       "path": "extension/background.js",
@@ -620,8 +620,8 @@
     },
     {
       "path": ".github/workflows/extension.yml",
-      "size": 3834,
-      "sha256": "c0e3a76edda495fcc3a42f4898e282ea8893a9c11b1ddf14b02d92551df63825"
+      "size": 4029,
+      "sha256": "3e1937c0e16c2f6228b93e064376f5ae0bf8159ef06e656bfeb7fcb56808fe41"
     },
     {
       "path": "db/migrations/001_init_pgvector.sql",
